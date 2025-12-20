@@ -219,7 +219,6 @@ export function useCreateVolunteer() {
         .from("volunteers")
         .insert({
           id: crypto.randomUUID(),
-          auth_user_id: crypto.randomUUID(),
           name: volunteer.name,
           email: volunteer.email || null,
           access_level: volunteer.accessLevel || "volunteer",
