@@ -26,7 +26,21 @@ export function useVolunteerProfile() {
         throw error;
       }
 
-      return data as VolunteerWithOrg | null;
+      if (!data) return null;
+
+      // Map snake_case from Supabase to camelCase for TypeScript
+      return {
+        id: data.id,
+        authUserId: data.auth_user_id,
+        organizationId: data.organization_id,
+        accessLevel: data.access_level,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        ministryAssignments: data.ministry_assignments,
+        createdAt: data.created_at,
+        organization: data.organization,
+      } as VolunteerWithOrg;
     },
     enabled: !!user,
   });
