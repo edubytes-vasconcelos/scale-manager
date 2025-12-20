@@ -14,7 +14,7 @@ export function useVolunteerProfile() {
       const { data, error } = await supabase
         .from("volunteers")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("auth_user_id", user.id)
         .single();
 
       if (error && error.code !== 'PGRST116') { // Ignore "no rows" error

@@ -5,9 +5,11 @@ import { z } from "zod";
 // Mirrors the existing Supabase 'volunteers' table
 export const volunteers = pgTable("volunteers", {
   id: uuid("id").primaryKey(),
-  userId: uuid("user_id").notNull(), // Links to auth.users
+  authUserId: uuid("auth_user_id").notNull(), // Links to auth.users
+  organizationId: uuid("organization_id"),
+  accessLevel: text("access_level"), // admin / leader / volunteer
   name: text("name").notNull(),
-  organization: text("organization"),
+  email: text("email"),
 });
 
 // Mirrors the existing Supabase 'services' table
