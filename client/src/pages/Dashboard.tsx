@@ -6,7 +6,7 @@ import { LogOut, LayoutGrid, CalendarDays, User, Building2 } from "lucide-react"
 export default function Dashboard() {
   const { signOut } = useAuth();
   const { data: volunteer, isLoading: loadingProfile } = useVolunteerProfile();
-  const { data: services, isLoading: loadingServices } = useServices();
+  const { data: services, isLoading: loadingServices } = useServices(volunteer?.organizationId);
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
 

@@ -31,17 +31,21 @@ export function useVolunteerProfile() {
   });
 }
 
-export function useServices() {
+export function useServices(organizationId: string | null | undefined) {
   return useQuery({
-    queryKey: ["services"],
+    queryKey: ["services", organizationId],
     queryFn: async () => {
+      if (!organizationId) return [];
+      
       const { data, error } = await supabase
         .from("services")
         .select("*")
+        .eq("organization_id", organizationId)
         .order("date", { ascending: true });
 
       if (error) throw error;
       return data as Service[];
     },
+    enabled: !!organizationId,
   });
 }
