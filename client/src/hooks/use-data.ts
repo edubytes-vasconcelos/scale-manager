@@ -212,7 +212,6 @@ export function useCreateVolunteer() {
     mutationFn: async (volunteer: {
       name: string;
       email?: string;
-      phone?: string;
       accessLevel?: string;
       organizationId: string;
     }) => {
@@ -220,9 +219,9 @@ export function useCreateVolunteer() {
         .from("volunteers")
         .insert({
           id: crypto.randomUUID(),
+          auth_user_id: crypto.randomUUID(),
           name: volunteer.name,
           email: volunteer.email || null,
-          phone: volunteer.phone || null,
           access_level: volunteer.accessLevel || "volunteer",
           organization_id: volunteer.organizationId,
         })
