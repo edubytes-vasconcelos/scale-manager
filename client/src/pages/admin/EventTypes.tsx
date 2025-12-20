@@ -8,21 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Sun, Moon, Star, Heart, Music, BookOpen, Users, Sparkles, Church, PartyPopper, Plus, Loader2 } from "lucide-react";
-
-const iconOptions = [
-  { value: "calendar", label: "Calendário", Icon: Calendar },
-  { value: "sun", label: "Sol", Icon: Sun },
-  { value: "moon", label: "Lua", Icon: Moon },
-  { value: "star", label: "Estrela", Icon: Star },
-  { value: "heart", label: "Coração", Icon: Heart },
-  { value: "music", label: "Música", Icon: Music },
-  { value: "book", label: "Livro", Icon: BookOpen },
-  { value: "users", label: "Pessoas", Icon: Users },
-  { value: "sparkles", label: "Brilho", Icon: Sparkles },
-  { value: "church", label: "Igreja", Icon: Church },
-  { value: "party", label: "Festa", Icon: PartyPopper },
-];
+import { Calendar, Plus, Loader2 } from "lucide-react";
 
 const colorOptions = [
   { value: "#3b82f6", label: "Azul" },
@@ -35,20 +21,6 @@ const colorOptions = [
   { value: "#f97316", label: "Laranja" },
 ];
 
-const iconMap: Record<string, any> = {
-  sun: Sun,
-  moon: Moon,
-  star: Star,
-  heart: Heart,
-  music: Music,
-  book: BookOpen,
-  users: Users,
-  sparkles: Sparkles,
-  church: Church,
-  party: PartyPopper,
-  calendar: Calendar,
-};
-
 export default function EventTypes() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: eventTypes, isLoading } = useEventTypes(profile?.organizationId);
@@ -58,16 +30,10 @@ export default function EventTypes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    icon: "calendar",
     color: "#3b82f6",
   });
 
   const canSubmit = !!profile?.organizationId && !createEventType.isPending;
-
-  const getIcon = (iconName: string | null) => {
-    if (!iconName) return Calendar;
-    return iconMap[iconName.toLowerCase()] || Calendar;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +51,6 @@ export default function EventTypes() {
     try {
       await createEventType.mutateAsync({
         name: formData.name.trim(),
-        icon: formData.icon,
         color: formData.color,
         organizationId: profile.organizationId,
       });
@@ -95,7 +60,7 @@ export default function EventTypes() {
         description: "Tipo de evento cadastrado com sucesso!",
       });
 
-      setFormData({ name: "", icon: "calendar", color: "#3b82f6" });
+      setFormData({ name: "", color: "#3b82f6" });
       setDialogOpen(false);
     } catch (error: any) {
       toast({
@@ -141,40 +106,37 @@ export default function EventTypes() {
         </div>
       ) : eventTypes && eventTypes.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {eventTypes.map((eventType) => {
-            const Icon = getIcon(eventType.icon);
-            return (
-              <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ 
-                        backgroundColor: eventType.color ? `${eventType.color}20` : 'hsl(var(--primary) / 0.1)',
-                      }}
-                    >
-                      <Icon 
-                        className="w-5 h-5" 
-                        style={{ color: eventType.color || 'hsl(var(--primary))' }}
-                      />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{eventType.name}</CardTitle>
-                      {eventType.color && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: eventType.color }}
-                          />
-                          <span className="text-xs text-muted-foreground">{eventType.color}</span>
-                        </div>
-                      )}
-                    </div>
+          {eventTypes.map((eventType) => (
+            <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-10 h-10 rounded-lg flex items-center justify-center"
+                    style={{ 
+                      backgroundColor: eventType.color ? `${eventType.color}20` : 'hsl(var(--primary) / 0.1)',
+                    }}
+                  >
+                    <Calendar 
+                      className="w-5 h-5" 
+                      style={{ color: eventType.color || 'hsl(var(--primary))' }}
+                    />
                   </div>
-                </CardHeader>
-              </Card>
-            );
-          })}
+                  <div>
+                    <CardTitle className="text-base">{eventType.name}</CardTitle>
+                    {eventType.color && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: eventType.color }}
+                        />
+                        <span className="text-xs text-muted-foreground">{eventType.color}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+          ))}
         </div>
       ) : (
         <Card className="border-dashed">
@@ -203,27 +165,6 @@ export default function EventTypes() {
                 placeholder="Ex: Culto Matutino, Culto Vespertino..."
                 data-testid="input-event-type-name"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="icon">Ícone</Label>
-              <Select
-                value={formData.icon}
-                onValueChange={(value) => setFormData({ ...formData, icon: value })}
-              >
-                <SelectTrigger data-testid="select-event-type-icon">
-                  <SelectValue placeholder="Selecione um ícone" />
-                </SelectTrigger>
-                <SelectContent>
-                  {iconOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div className="flex items-center gap-2">
-                        <option.Icon className="w-4 h-4" />
-                        {option.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="color">Cor</Label>
