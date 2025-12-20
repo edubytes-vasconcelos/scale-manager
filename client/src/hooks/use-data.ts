@@ -267,7 +267,6 @@ export function useCreateEventType() {
   return useMutation({
     mutationFn: async (eventType: {
       name: string;
-      icon?: string;
       color?: string;
       organizationId: string;
     }) => {
@@ -275,7 +274,7 @@ export function useCreateEventType() {
         .from("event_types")
         .insert({
           name: eventType.name,
-          icon: eventType.icon || null,
+          icon: "calendar",
           color: eventType.color || null,
           organization_id: eventType.organizationId,
         })
