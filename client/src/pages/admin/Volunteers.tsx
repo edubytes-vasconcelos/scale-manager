@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Shield, UserCheck, UserCog, User, Plus, Loader2, Phone } from "lucide-react";
+import { Users, Mail, Shield, UserCheck, UserCog, User, Plus, Loader2 } from "lucide-react";
 
 export default function Volunteers() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
@@ -20,7 +20,6 @@ export default function Volunteers() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: "",
     accessLevel: "volunteer",
   });
 
@@ -54,7 +53,6 @@ export default function Volunteers() {
       await createVolunteer.mutateAsync({
         name: formData.name.trim(),
         email: formData.email.trim() || undefined,
-        phone: formData.phone.trim() || undefined,
         accessLevel: formData.accessLevel,
         organizationId: profile.organizationId,
       });
@@ -64,7 +62,7 @@ export default function Volunteers() {
         description: "Voluntário cadastrado com sucesso!",
       });
 
-      setFormData({ name: "", email: "", phone: "", accessLevel: "volunteer" });
+      setFormData({ name: "", email: "", accessLevel: "volunteer" });
       setDialogOpen(false);
     } catch (error: any) {
       toast({
@@ -178,20 +176,6 @@ export default function Volunteers() {
                   placeholder="email@exemplo.com"
                   className="pl-10"
                   data-testid="input-volunteer-email"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telefone</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="(00) 00000-0000"
-                  className="pl-10"
-                  data-testid="input-volunteer-phone"
                 />
               </div>
             </div>
