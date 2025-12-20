@@ -3,17 +3,20 @@ import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRight, ShieldCheck } from "lucide-react";
+import { Loader2, ArrowRight, ShieldCheck, UserPlus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const [_, setLocation] = useLocation();
   const { session } = useAuth();
   const { toast } = useToast();
 
-  // Redirect if already logged in
   useEffect(() => {
     if (session) {
       setLocation("/");
@@ -37,7 +40,6 @@ export default function Login() {
           title: "Bem-vindo de volta!",
           description: "Login realizado com sucesso.",
         });
-        // Redirect will happen via useEffect when session updates
       }
     } catch (error: any) {
       toast({
@@ -49,40 +51,126 @@ export default function Login() {
     }
   };
 
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!name.trim()) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Por favor, informe seu nome completo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Senha muito curta",
+        description: "A senha deve ter pelo menos 6 caracteres.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name.trim(),
+          },
+        },
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        const { error: volunteerError } = await supabase
+          .from("volunteers")
+          .insert({
+            id: crypto.randomUUID(),
+            auth_user_id: authData.user.id,
+            name: name.trim(),
+            email: email,
+            access_level: "volunteer",
+          });
+
+        if (volunteerError) {
+          console.error("Error creating volunteer profile:", volunteerError);
+        }
+
+        toast({
+          title: "Cadastro realizado!",
+          description: "Sua conta foi criada. Você já pode fazer login.",
+        });
+
+        setIsSignUp(false);
+        setName("");
+        setPassword("");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro no cadastro",
+        description: error.message || "Não foi possível criar sua conta.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      {/* Abstract Background Shapes */}
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-400/5 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-white rounded-3xl shadow-xl shadow-black/5 border border-white/50 p-8 md:p-10">
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl shadow-black/5 border border-white/50 dark:border-slate-700 p-8 md:p-10">
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mb-6">
-              <ShieldCheck className="w-8 h-8" />
+              {isSignUp ? <UserPlus className="w-8 h-8" /> : <ShieldCheck className="w-8 h-8" />}
             </div>
             <h1 className="text-3xl font-bold text-foreground mb-2 tracking-tight font-display">
-              Área de Membros
+              {isSignUp ? "Criar Conta" : "Área de Membros"}
             </h1>
             <p className="text-muted-foreground text-sm">
               Gestor de Escalas – IASD Bosque
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-5">
+            {isSignUp && (
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground/80 ml-1">
+                  Nome Completo
+                </label>
+                <Input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  data-testid="input-signup-name"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground/80 ml-1">
                 E-mail
               </label>
-              <input
+              <Input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
-                className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-foreground placeholder:text-muted-foreground/70"
+                data-testid="input-email"
               />
             </div>
 
@@ -90,39 +178,58 @@ export default function Login() {
               <label className="text-sm font-semibold text-foreground/80 ml-1">
                 Senha
               </label>
-              <input
+              <Input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-foreground placeholder:text-muted-foreground/70"
+                data-testid="input-password"
               />
+              {isSignUp && (
+                <p className="text-xs text-muted-foreground ml-1">Mínimo de 6 caracteres</p>
+              )}
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
-              className="w-full py-4 rounded-xl bg-primary text-primary-foreground font-bold text-lg shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 mt-4"
+              className="w-full py-6 text-lg mt-4"
+              data-testid={isSignUp ? "button-signup" : "button-login"}
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Entrando...
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  {isSignUp ? "Criando conta..." : "Entrando..."}
                 </>
               ) : (
                 <>
-                  Acessar Sistema
-                  <ArrowRight className="w-5 h-5" />
+                  {isSignUp ? "Criar Conta" : "Acessar Sistema"}
+                  <ArrowRight className="w-5 h-5 ml-2" />
                 </>
               )}
-            </button>
+            </Button>
           </form>
           
-          <div className="mt-8 text-center">
-            <p className="text-xs text-muted-foreground">
-              Esqueceu sua senha? Entre em contato com a secretaria.
-            </p>
+          <div className="mt-8 text-center space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setName("");
+                setPassword("");
+              }}
+              className="text-sm text-primary font-medium hover:underline"
+              data-testid="toggle-auth-mode"
+            >
+              {isSignUp ? "Já tenho uma conta" : "Não tenho conta – Cadastrar"}
+            </button>
+            
+            {!isSignUp && (
+              <p className="text-xs text-muted-foreground">
+                Esqueceu sua senha? Entre em contato com a secretaria.
+              </p>
+            )}
           </div>
         </div>
       </div>
