@@ -57,7 +57,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 opacity-75" />
-                  {loadingProfile ? "Carregando..." : (volunteer?.organization || "Sem organização")}
+                  {loadingProfile ? "Carregando..." : (volunteer?.organization?.name || "Sem organização")}
                 </div>
               </div>
             </div>

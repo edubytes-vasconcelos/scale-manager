@@ -12,16 +12,31 @@ export const volunteers = pgTable("volunteers", {
   email: text("email"),
 });
 
+// Mirrors the existing Supabase 'organizations' table
+export const organizations = pgTable("organizations", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at"),
+});
+
 // Mirrors the existing Supabase 'services' table
 export const services = pgTable("services", {
   id: uuid("id").primaryKey(),
   name: text("name").notNull(),
   date: timestamp("date").notNull(),
   description: text("description"),
+  organizationId: uuid("organization_id"),
 });
 
 export const insertVolunteerSchema = createInsertSchema(volunteers);
 export const insertServiceSchema = createInsertSchema(services);
+export const insertOrganizationSchema = createInsertSchema(organizations);
 
 export type Volunteer = typeof volunteers.$inferSelect;
 export type Service = typeof services.$inferSelect;
+export type Organization = typeof organizations.$inferSelect;
+
+// Extended type with organization name
+export type VolunteerWithOrg = Volunteer & {
+  organization?: { name: string } | null;
+};

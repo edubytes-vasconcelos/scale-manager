@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import type { Volunteer, Service } from "@shared/schema";
+import type { Service, VolunteerWithOrg } from "@shared/schema";
 
 export function useVolunteerProfile() {
   const { user } = useAuth();
@@ -11,17 +11,21 @@ export function useVolunteerProfile() {
     queryFn: async () => {
       if (!user) return null;
       
+      // Fetch volunteer with organization name via join
       const { data, error } = await supabase
         .from("volunteers")
-        .select("*")
+        .select(`
+          *,
+          organization:organizations(name)
+        `)
         .eq("auth_user_id", user.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // Ignore "no rows" error
+      if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
-      return data as Volunteer | null;
+      return data as VolunteerWithOrg | null;
     },
     enabled: !!user,
   });
