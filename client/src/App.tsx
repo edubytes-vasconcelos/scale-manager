@@ -7,6 +7,11 @@ import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Volunteers from "@/pages/admin/Volunteers";
+import Ministries from "@/pages/admin/Ministries";
+import EventTypes from "@/pages/admin/EventTypes";
+import Teams from "@/pages/admin/Teams";
+import AppLayout from "@/components/AppLayout";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { session, loading } = useAuth();
@@ -29,12 +34,34 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function AdminPageWrapper({ Component }: { Component: React.ComponentType }) {
+  return (
+    <AppLayout>
+      <div className="p-6 lg:p-8">
+        <Component />
+      </div>
+    </AppLayout>
+  );
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/">
         <ProtectedRoute component={Dashboard} />
+      </Route>
+      <Route path="/admin/volunteers">
+        <ProtectedRoute component={() => <AdminPageWrapper Component={Volunteers} />} />
+      </Route>
+      <Route path="/admin/ministries">
+        <ProtectedRoute component={() => <AdminPageWrapper Component={Ministries} />} />
+      </Route>
+      <Route path="/admin/event-types">
+        <ProtectedRoute component={() => <AdminPageWrapper Component={EventTypes} />} />
+      </Route>
+      <Route path="/admin/teams">
+        <ProtectedRoute component={() => <AdminPageWrapper Component={Teams} />} />
       </Route>
       <Route component={NotFound} />
     </Switch>

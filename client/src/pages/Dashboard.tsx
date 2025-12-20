@@ -1,16 +1,19 @@
-import { useAuth } from "@/providers/AuthProvider";
-import { useVolunteerProfile, useServices, useMySchedules } from "@/hooks/use-data";
+import { useVolunteerProfile, useServices, useMySchedules, useUpdateAssignmentStatus } from "@/hooks/use-data";
 import { ServiceCard } from "@/components/ServiceCard";
-import { LogOut, LayoutGrid, CalendarDays, User, Building2, ClipboardCheck } from "lucide-react";
+import { CalendarDays, User, Building2, ClipboardCheck, Check, X, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+import AppLayout from "@/components/AppLayout";
 
 export default function Dashboard() {
-  const { signOut } = useAuth();
+  const { toast } = useToast();
   const { data: volunteer, isLoading: loadingProfile } = useVolunteerProfile();
   const { data: services, isLoading: loadingServices } = useServices(volunteer?.organizationId);
   const { data: mySchedules, isLoading: loadingMySchedules } = useMySchedules(volunteer?.id, volunteer?.organizationId);
+  const updateStatus = useUpdateAssignmentStatus();
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
   
@@ -18,6 +21,36 @@ export default function Dashboard() {
     if (!service.assignments || !volunteer?.id) return null;
     const assignment = service.assignments.find((a: any) => a.volunteerId === volunteer.id);
     return assignment?.role || null;
+  };
+  
+  const getMyStatus = (service: any) => {
+    if (!service.assignments || !volunteer?.id) return null;
+    const assignment = service.assignments.find((a: any) => a.volunteerId === volunteer.id);
+    return assignment?.status || null;
+  };
+  
+  const handleConfirm = async (serviceId: string, status: "confirmed" | "declined") => {
+    if (!volunteer?.id) return;
+    
+    try {
+      await updateStatus.mutateAsync({ 
+        serviceId, 
+        volunteerId: volunteer.id, 
+        status 
+      });
+      toast({
+        title: status === "confirmed" ? "Presença confirmada!" : "Presença recusada",
+        description: status === "confirmed" 
+          ? "Você confirmou sua participação neste evento."
+          : "Você recusou participar deste evento.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar sua confirmação.",
+        variant: "destructive",
+      });
+    }
   };
   
   const getStatusBadge = (service: any) => {
@@ -38,32 +71,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50">
-      {/* Header */}
-      <header className="bg-white border-b border-border sticky top-0 z-30 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-              <LayoutGrid className="w-5 h-5" />
-            </div>
-            <span className="font-display font-bold text-lg hidden sm:block">
-              Gestor IASD Bosque
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              onClick={signOut}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-destructive transition-colors px-3 py-1.5 rounded-lg hover:bg-destructive/5"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Sair</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <AppLayout>
+      <div className="p-6 lg:p-8 space-y-8">
         {/* Welcome Section */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-primary to-blue-600 text-white shadow-xl shadow-primary/20 p-8 md:p-10">
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -146,8 +155,41 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 sm:self-center">
-                    {getStatusBadge(schedule)}
+                  <div className="flex items-center gap-2 sm:self-center flex-wrap">
+                    {getMyStatus(schedule) === "pending" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handleConfirm(schedule.id, "confirmed")}
+                          disabled={updateStatus.isPending}
+                          data-testid={`button-confirm-${schedule.id}`}
+                        >
+                          {updateStatus.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Check className="w-4 h-4 mr-1" />
+                              Confirmar
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => handleConfirm(schedule.id, "declined")}
+                          disabled={updateStatus.isPending}
+                          data-testid={`button-decline-${schedule.id}`}
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Recusar
+                        </Button>
+                      </>
+                    ) : (
+                      getStatusBadge(schedule)
+                    )}
                   </div>
                 </div>
               ))}
@@ -196,7 +238,7 @@ export default function Dashboard() {
             </div>
           )}
         </section>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
