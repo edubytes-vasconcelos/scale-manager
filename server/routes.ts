@@ -6,11 +6,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
-
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
-
+  // No server-side routes needed for this MVP
+  // The app uses Supabase client-side directly
+  
   return httpServer;
 }

@@ -1,18 +1,25 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// Mirrors the existing Supabase 'volunteers' table
+export const volunteers = pgTable("volunteers", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull(), // Links to auth.users
+  name: text("name").notNull(),
+  organization: text("organization"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// Mirrors the existing Supabase 'services' table
+export const services = pgTable("services", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  date: timestamp("date").notNull(),
+  description: text("description"),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const insertVolunteerSchema = createInsertSchema(volunteers);
+export const insertServiceSchema = createInsertSchema(services);
+
+export type Volunteer = typeof volunteers.$inferSelect;
+export type Service = typeof services.$inferSelect;
