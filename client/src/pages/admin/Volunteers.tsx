@@ -1,29 +1,25 @@
 import { useState } from "react";
-import { useVolunteerProfile, useVolunteers, useCreateVolunteer } from "@/hooks/use-data";
+import { useVolunteerProfile, useVolunteers } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Shield, UserCheck, UserCog, User, Plus, Loader2 } from "lucide-react";
+import { Users, Mail, Shield, UserCheck, UserCog, User, Loader2, Edit2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { queryClient } from "@/lib/queryClient";
+import type { Volunteer } from "@shared/schema";
 
 export default function Volunteers() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: volunteers, isLoading } = useVolunteers(profile?.organizationId);
-  const createVolunteer = useCreateVolunteer();
   const { toast } = useToast();
   
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    accessLevel: "volunteer",
-  });
-
-  const canSubmit = !!profile?.organizationId && !createVolunteer.isPending;
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
+  const [newAccessLevel, setNewAccessLevel] = useState("volunteer");
+  const [isSaving, setIsSaving] = useState(false);
 
   const getAccessLevelBadge = (level: string | null) => {
     switch (level) {
@@ -36,40 +32,39 @@ export default function Volunteers() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!profile?.organizationId) return;
-    if (!formData.name.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "O nome é obrigatório.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleEditClick = (volunteer: Volunteer) => {
+    setSelectedVolunteer(volunteer);
+    setNewAccessLevel(volunteer.accessLevel || "volunteer");
+    setEditDialogOpen(true);
+  };
 
+  const handleSaveAccessLevel = async () => {
+    if (!selectedVolunteer) return;
+    
+    setIsSaving(true);
     try {
-      await createVolunteer.mutateAsync({
-        name: formData.name.trim(),
-        email: formData.email.trim() || undefined,
-        accessLevel: formData.accessLevel,
-        organizationId: profile.organizationId,
-      });
+      const { error } = await supabase
+        .from("volunteers")
+        .update({ access_level: newAccessLevel })
+        .eq("id", selectedVolunteer.id);
+
+      if (error) throw error;
 
       toast({
         title: "Sucesso",
-        description: "Voluntário cadastrado com sucesso!",
+        description: "Nível de acesso atualizado!",
       });
 
-      setFormData({ name: "", email: "", accessLevel: "volunteer" });
-      setDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["volunteers"] });
+      setEditDialogOpen(false);
     } catch (error: any) {
       toast({
-        title: "Erro ao cadastrar",
+        title: "Erro ao atualizar",
         description: error.message || "Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -85,19 +80,9 @@ export default function Volunteers() {
             Gerencie os voluntários da sua organização
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="text-sm">
-            {volunteers?.length || 0} cadastrados
-          </Badge>
-          <Button 
-            onClick={() => setDialogOpen(true)} 
-            disabled={profileLoading || !profile?.organizationId}
-            data-testid="button-add-volunteer"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Voluntário
-          </Button>
-        </div>
+        <Badge variant="outline" className="text-sm">
+          {volunteers?.length || 0} cadastrados
+        </Badge>
       </div>
 
       {isLoading ? (
@@ -126,6 +111,14 @@ export default function Volunteers() {
                       )}
                     </div>
                   </div>
+                  <Button 
+                    size="icon" 
+                    variant="ghost"
+                    onClick={() => handleEditClick(volunteer)}
+                    data-testid={`button-edit-volunteer-${volunteer.id}`}
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
@@ -143,49 +136,29 @@ export default function Volunteers() {
               <Users className="w-7 h-7 text-slate-300" />
             </div>
             <p className="text-base font-medium text-foreground">Nenhum voluntário encontrado</p>
-            <p className="text-muted-foreground text-sm">Adicione voluntários à sua organização.</p>
+            <p className="text-muted-foreground text-sm text-center mt-1">
+              Os voluntários aparecem aqui após se registrarem no sistema.
+            </p>
           </CardContent>
         </Card>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo Voluntário</DialogTitle>
+            <DialogTitle>Editar Voluntário</DialogTitle>
+            <DialogDescription>
+              Altere o nível de acesso de {selectedVolunteer?.name}
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome completo"
-                data-testid="input-volunteer-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="email@exemplo.com"
-                  className="pl-10"
-                  data-testid="input-volunteer-email"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="accessLevel">Nível de Acesso</Label>
+              <label className="text-sm font-medium">Nível de Acesso</label>
               <Select
-                value={formData.accessLevel}
-                onValueChange={(value) => setFormData({ ...formData, accessLevel: value })}
+                value={newAccessLevel}
+                onValueChange={setNewAccessLevel}
               >
-                <SelectTrigger data-testid="select-volunteer-access">
+                <SelectTrigger data-testid="select-edit-access">
                   <SelectValue placeholder="Selecione o nível" />
                 </SelectTrigger>
                 <SelectContent>
@@ -195,22 +168,22 @@ export default function Volunteers() {
                 </SelectContent>
               </Select>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={!canSubmit} data-testid="button-submit-volunteer">
-                {createVolunteer.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  "Salvar"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveAccessLevel} disabled={isSaving} data-testid="button-save-access">
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
