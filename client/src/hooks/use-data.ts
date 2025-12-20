@@ -219,6 +219,7 @@ export function useCreateVolunteer() {
       const { data, error } = await supabase
         .from("volunteers")
         .insert({
+          id: crypto.randomUUID(),
           name: volunteer.name,
           email: volunteer.email || null,
           phone: volunteer.phone || null,
@@ -247,6 +248,7 @@ export function useCreateMinistry() {
       const { data, error } = await supabase
         .from("ministries")
         .insert({
+          id: crypto.randomUUID(),
           name: ministry.name,
           icon: ministry.icon || null,
           organization_id: ministry.organizationId,
@@ -273,6 +275,7 @@ export function useCreateEventType() {
       const { data, error } = await supabase
         .from("event_types")
         .insert({
+          id: crypto.randomUUID(),
           name: eventType.name,
           color: eventType.color || null,
           organization_id: eventType.organizationId,
