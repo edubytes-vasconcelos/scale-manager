@@ -192,3 +192,87 @@ export function useUpdateAssignmentStatus() {
     },
   });
 }
+
+export function useCreateVolunteer() {
+  return useMutation({
+    mutationFn: async (volunteer: {
+      name: string;
+      email?: string;
+      phone?: string;
+      accessLevel?: string;
+      organizationId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("volunteers")
+        .insert({
+          name: volunteer.name,
+          email: volunteer.email || null,
+          phone: volunteer.phone || null,
+          access_level: volunteer.accessLevel || "volunteer",
+          organization_id: volunteer.organizationId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["volunteers"] });
+    },
+  });
+}
+
+export function useCreateMinistry() {
+  return useMutation({
+    mutationFn: async (ministry: {
+      name: string;
+      icon?: string;
+      organizationId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("ministries")
+        .insert({
+          name: ministry.name,
+          icon: ministry.icon || null,
+          organization_id: ministry.organizationId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ministries"] });
+    },
+  });
+}
+
+export function useCreateEventType() {
+  return useMutation({
+    mutationFn: async (eventType: {
+      name: string;
+      icon?: string;
+      color?: string;
+      organizationId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("event_types")
+        .insert({
+          name: eventType.name,
+          icon: eventType.icon || null,
+          color: eventType.color || null,
+          organization_id: eventType.organizationId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event_types"] });
+    },
+  });
+}

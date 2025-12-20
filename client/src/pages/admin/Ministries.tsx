@@ -1,7 +1,27 @@
-import { useVolunteerProfile, useMinistries } from "@/hooks/use-data";
+import { useState } from "react";
+import { useVolunteerProfile, useMinistries, useCreateMinistry } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles, Plus, Loader2 } from "lucide-react";
+
+const iconOptions = [
+  { value: "church", label: "Igreja", Icon: Church },
+  { value: "music", label: "Música", Icon: Music },
+  { value: "heart", label: "Coração", Icon: Heart },
+  { value: "book", label: "Livro", Icon: BookOpen },
+  { value: "users", label: "Pessoas", Icon: Users },
+  { value: "mic", label: "Microfone", Icon: Mic2 },
+  { value: "hand", label: "Mão", Icon: Hand },
+  { value: "coffee", label: "Café", Icon: Coffee },
+  { value: "baby", label: "Bebê", Icon: Baby },
+  { value: "sparkles", label: "Estrelas", Icon: Sparkles },
+];
 
 const iconMap: Record<string, any> = {
   music: Music,
@@ -17,17 +37,63 @@ const iconMap: Record<string, any> = {
 };
 
 export default function Ministries() {
-  const { data: profile } = useVolunteerProfile();
+  const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: ministries, isLoading } = useMinistries(profile?.organizationId);
+  const createMinistry = useCreateMinistry();
+  const { toast } = useToast();
+  
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    icon: "church",
+  });
+
+  const canSubmit = !!profile?.organizationId && !createMinistry.isPending;
 
   const getIcon = (iconName: string | null) => {
     if (!iconName) return Church;
     return iconMap[iconName.toLowerCase()] || Church;
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!profile?.organizationId) return;
+    if (!formData.name.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "O nome é obrigatório.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await createMinistry.mutateAsync({
+        name: formData.name.trim(),
+        icon: formData.icon,
+        organizationId: profile.organizationId,
+      });
+
+      toast({
+        title: "Sucesso",
+        description: "Ministério cadastrado com sucesso!",
+      });
+
+      setFormData({ name: "", icon: "church" });
+      setDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao cadastrar",
+        description: error.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Church className="w-6 h-6 text-primary" />
@@ -37,9 +103,19 @@ export default function Ministries() {
             Gerencie os ministérios da sua igreja
           </p>
         </div>
-        <Badge variant="outline" className="text-sm">
-          {ministries?.length || 0} ministérios
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="text-sm">
+            {ministries?.length || 0} ministérios
+          </Badge>
+          <Button 
+            onClick={() => setDialogOpen(true)} 
+            disabled={profileLoading || !profile?.organizationId}
+            data-testid="button-add-ministry"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Ministério
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -77,6 +153,62 @@ export default function Ministries() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Ministério</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Ex: Louvor, Recepção, Infantil..."
+                data-testid="input-ministry-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="icon">Ícone</Label>
+              <Select
+                value={formData.icon}
+                onValueChange={(value) => setFormData({ ...formData, icon: value })}
+              >
+                <SelectTrigger data-testid="select-ministry-icon">
+                  <SelectValue placeholder="Selecione um ícone" />
+                </SelectTrigger>
+                <SelectContent>
+                  {iconOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <div className="flex items-center gap-2">
+                        <option.Icon className="w-4 h-4" />
+                        {option.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={!canSubmit} data-testid="button-submit-ministry">
+                {createMinistry.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
