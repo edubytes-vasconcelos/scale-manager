@@ -1,0 +1,244 @@
+Criar um sistema web de gestão de escalas de voluntários para igrejas, funcional, simples e confiável, usando Supabase como backend e React no frontend, pronto para rodar em VPS externa.
+
+O foco é entregar um MVP funcional em até 7 dias, com possibilidade de evolução futura.
+
+🧱 STACK DEFINIDA (NÃO MUDAR)
+Frontend
+
+React (SPA)
+
+Vite
+
+TypeScript
+
+Tailwind CSS
+
+Estado simples (hooks)
+
+Backend
+
+Supabase (já existente)
+
+Auth
+
+PostgreSQL
+
+Row Level Security (RLS)
+
+Infra
+
+Projeto desenvolvido no Replit
+
+Build exportável
+
+Deploy em VPS externa (Nginx ou Docker)
+
+🔐 AUTENTICAÇÃO
+
+Usar Supabase Auth
+
+Login por email + senha
+
+NÃO criar backend próprio
+
+Todas as permissões vêm do banco
+
+🧩 MODELO DE DADOS (OBRIGATÓRIO)
+organizations
+
+id (uuid)
+
+name
+
+created_at
+
+volunteers
+
+id
+
+organization_id
+
+auth_user_id ← liga com auth.users.id
+
+name
+
+email
+
+access_level (admin | leader | volunteer)
+
+ministry_assignments (JSON)
+
+created_at
+
+ministries
+
+id
+
+organization_id
+
+name
+
+icon
+
+teams
+
+id
+
+organization_id
+
+name
+
+member_ids (array de volunteer.id)
+
+event_types
+
+id
+
+organization_id
+
+name
+
+color
+
+icon
+
+services (ESCALAS)
+
+id
+
+organization_id
+
+date
+
+title
+
+event_type_id
+
+assignments (JSONB)
+
+created_at
+
+Estrutura do assignments
+[
+  {
+    "volunteerId": "uuid",
+    "role": "Função",
+    "status": "pending | confirmed | declined"
+  },
+  {
+    "teamId": "uuid",
+    "role": "Função",
+    "status": "pending"
+  }
+]
+
+🔒 SEGURANÇA (RLS)
+
+Toda tabela tem organization_id
+
+Usuário só acessa dados da sua organização
+
+Admin:
+
+Pode tudo
+
+Leader:
+
+Pode editar escalas
+
+Volunteer:
+
+Apenas visualizar e confirmar presença
+
+🧭 FLUXO DO APLICATIVO
+1. Login
+
+Supabase Auth
+
+2. Resolver perfil
+
+Buscar volunteer por auth_user_id
+
+3. Resolver organização
+
+Via organization_id
+
+4. Carregar dados principais
+
+services
+
+volunteers
+
+teams
+
+ministries
+
+event_types
+
+5. Renderizar UI conforme perfil
+🖥️ TELAS OBRIGATÓRIAS (MVP)
+
+Login
+
+Dashboard (agenda de escalas)
+
+Voluntários (admin)
+
+Ministérios (admin)
+
+Tipos de evento (admin)
+
+Equipes (admin)
+
+Confirmação de presença (voluntário)
+
+🚦 REGRAS IMPORTANTES
+
+❌ NÃO usar importmap
+
+❌ NÃO misturar backend Node com frontend
+
+❌ NÃO usar process.env
+
+✅ Usar apenas import.meta.env
+
+✅ Criar .env.example
+
+✅ Código simples, legível e estável
+
+✅ Priorizar funcionamento, não perfeição
+
+🧪 ERROS ESPERADOS
+
+Se houver erro de:
+
+variável de ambiente → parar e explicar
+
+Supabase → mostrar log claro
+
+permissão → indicar política RLS
+
+🚀 RESULTADO ESPERADO
+
+Ao final:
+
+App rodando no Replit
+
+Login funcionando
+
+Escalas criáveis
+
+Voluntários confirmando presença
+
+Build pronto para VPS
+
+🧠 CONTEXTO IMPORTANTE
+
+Este projeto já foi validado.
+O usuário não é desenvolvedor.
+O objetivo é entregar, não experimentar tecnologias.
+
+✅ FRASE FINAL (IMPORTANTE)
+
+Construa este projeto de forma incremental, garantindo que cada tela funcione antes de avançar.
+Nunca quebre o que já está funcionando.
