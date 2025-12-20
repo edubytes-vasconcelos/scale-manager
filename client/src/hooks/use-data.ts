@@ -274,7 +274,6 @@ export function useCreateEventType() {
         .from("event_types")
         .insert({
           name: eventType.name,
-          icon: "calendar",
           color: eventType.color || null,
           organization_id: eventType.organizationId,
         })

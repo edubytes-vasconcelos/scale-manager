@@ -43,7 +43,6 @@ export const eventTypes = pgTable("event_types", {
   organizationId: uuid("organization_id"),
   name: text("name").notNull(),
   color: text("color"),
-  icon: text("icon"),
 });
 
 // Assignment type for services
