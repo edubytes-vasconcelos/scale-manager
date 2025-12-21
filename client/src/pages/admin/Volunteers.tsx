@@ -209,7 +209,6 @@ export default function Volunteers() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {volunteers.map((volunteer) => {
             const vAssignments = (volunteer.ministryAssignments || []) as MinistryAssignment[];
-            const leaderMinistries = vAssignments.filter(a => a.isLeader);
             
             return (
               <Card key={volunteer.id} data-testid={`card-volunteer-${volunteer.id}`}>
@@ -250,11 +249,18 @@ export default function Volunteers() {
                       </Badge>
                     )}
                   </div>
-                  {leaderMinistries.length > 0 && (
+                  {vAssignments.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">
-                      {leaderMinistries.map((a) => (
-                        <Badge key={a.ministryId} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                          <Star className="w-2.5 h-2.5 mr-1" />
+                      {vAssignments.map((a) => (
+                        <Badge 
+                          key={a.ministryId} 
+                          variant="outline" 
+                          className={`text-xs ${a.isLeader 
+                            ? "bg-blue-50 text-blue-700 border-blue-200" 
+                            : "bg-slate-50 text-slate-600 border-slate-200"}`}
+                        >
+                          {a.isLeader && <Star className="w-2.5 h-2.5 mr-1" />}
+                          <Church className={`w-2.5 h-2.5 mr-1 ${a.isLeader ? "hidden" : ""}`} />
                           {getMinistryName(a.ministryId)}
                         </Badge>
                       ))}
