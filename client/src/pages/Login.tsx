@@ -88,28 +88,10 @@ export default function Login() {
       if (authError) throw authError;
 
       if (authData.user) {
-        const { error: volunteerError } = await supabase
-          .from("volunteers")
-          .insert({
-            id: crypto.randomUUID(),
-            auth_user_id: authData.user.id,
-            name: name.trim(),
-            email: email,
-            access_level: "volunteer",
-          });
-
-        if (volunteerError) {
-          console.error("Error creating volunteer profile:", volunteerError);
-        }
-
         toast({
           title: "Cadastro realizado!",
-          description: "Sua conta foi criada. Você já pode fazer login.",
+          description: "Sua conta foi criada com sucesso.",
         });
-
-        setIsSignUp(false);
-        setName("");
-        setPassword("");
       }
     } catch (error: any) {
       toast({

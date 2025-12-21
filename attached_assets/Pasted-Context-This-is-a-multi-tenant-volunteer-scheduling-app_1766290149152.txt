@@ -1,0 +1,53 @@
+Context:
+This is a multi-tenant volunteer scheduling app using:
+- React + Vite (frontend)
+- Supabase (Auth + Database + RLS)
+- A volunteers table that links users to organizations (churches)
+
+Problem to solve:
+The onboarding flow is incomplete. A user who logs in may be in one of three situations:
+1) Already exists as a volunteer (email already registered, auth_user_id is null)
+2) Does not exist as a volunteer, but may belong to an existing church
+3) Wants to create a new church and become admin
+
+Rules (DO NOT BREAK THESE):
+- NEVER automatically create a church
+- Creating a church must be an explicit user action
+- Do NOT refactor unrelated code
+- Do NOT change database schema unless explicitly required
+- Keep changes minimal and localized
+
+Required behavior:
+After login:
+1) Call an RPC (claim_profile) to link auth.uid() to an existing volunteer by email
+2) Fetch the current user volunteer profile
+3) If a volunteer profile exists:
+   - Enter the application normally
+4) If NO volunteer profile exists:
+   - Show a "No organization linked" screen with two options:
+     a) "I already belong to a church" (shows informational message only)
+     b) "Create a new church" (explicit action)
+
+Create new church flow:
+- When the user chooses "Create a new church":
+  - Ask only for church name
+  - Call an RPC create_church_and_admin(church_name)
+  - This RPC must:
+    * Create the organization
+    * Create a volunteer linked to auth.uid()
+    * Set role = 'admin' and can_lead = true
+  - Refresh the auth session
+  - Reload app state and enter normally
+
+Implementation instructions:
+- Add a simple React screen for "No organization linked"
+- Integrate this logic into the existing App.tsx / loadData flow
+- Use existing Supabase client and routing
+- Do NOT introduce new libraries
+- Keep UI minimal and functional
+
+Goal:
+Close the onboarding flow so that:
+- Existing volunteers are linked automatically
+- New users are never forced to create a church
+- Church creation is always an explicit decision

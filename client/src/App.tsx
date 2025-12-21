@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
+import Onboarding from "@/pages/Onboarding";
 import Volunteers from "@/pages/admin/Volunteers";
 import Ministries from "@/pages/admin/Ministries";
 import EventTypes from "@/pages/admin/EventTypes";
@@ -14,11 +15,11 @@ import Teams from "@/pages/admin/Teams";
 import AppLayout from "@/components/AppLayout";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { session, loading } = useAuth();
+  const { session, volunteer, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-10 h-10 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground font-medium animate-pulse">Carregando sistema...</p>
@@ -29,6 +30,10 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   if (!session) {
     return <Redirect to="/login" />;
+  }
+
+  if (!volunteer || !volunteer.organizationId) {
+    return <Onboarding />;
   }
 
   return <Component />;
