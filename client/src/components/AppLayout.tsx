@@ -27,8 +27,13 @@ const navItems = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { signOut } = useAuth();
   const { data: profile } = useVolunteerProfile();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setLocation("/login");
+  };
 
   const isAdmin = profile?.accessLevel === "admin" || profile?.accessLevel === "leader";
   
@@ -53,7 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Button
             size="icon"
             variant="ghost"
-            onClick={signOut}
+            onClick={handleSignOut}
             data-testid="button-logout-mobile"
           >
             <LogOut className="w-5 h-5" />
@@ -144,7 +149,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Button
               variant="ghost"
               className="w-full justify-start text-muted-foreground hover:text-destructive"
-              onClick={signOut}
+              onClick={handleSignOut}
               data-testid="button-logout"
             >
               <LogOut className="w-4 h-4 mr-2" />
