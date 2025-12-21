@@ -106,7 +106,17 @@ export function useVolunteers(organizationId: string | null | undefined) {
         .order("name", { ascending: true });
 
       if (error) throw error;
-      return data as Volunteer[];
+      
+      return data.map((v: any) => ({
+        id: v.id,
+        authUserId: v.auth_user_id,
+        organizationId: v.organization_id,
+        accessLevel: v.access_level,
+        name: v.name,
+        email: v.email,
+        ministryAssignments: v.ministry_assignments,
+        createdAt: v.created_at,
+      })) as Volunteer[];
     },
     enabled: !!organizationId,
   });
