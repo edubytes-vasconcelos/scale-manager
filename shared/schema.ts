@@ -5,7 +5,7 @@ import { z } from "zod";
 // Mirrors the existing Supabase 'volunteers' table
 export const volunteers = pgTable("volunteers", {
   id: uuid("id").primaryKey(),
-  authUserId: uuid("auth_user_id").notNull(),
+  authUserId: uuid("auth_user_id"), // null for pre-registered volunteers
   organizationId: uuid("organization_id"),
   accessLevel: text("access_level"), // admin | leader | volunteer
   name: text("name").notNull(),
