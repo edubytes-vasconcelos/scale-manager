@@ -12,6 +12,7 @@ import Volunteers from "@/pages/admin/Volunteers";
 import Ministries from "@/pages/admin/Ministries";
 import EventTypes from "@/pages/admin/EventTypes";
 import Teams from "@/pages/admin/Teams";
+import Schedules from "@/pages/admin/Schedules";
 import AppLayout from "@/components/AppLayout";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -55,6 +56,9 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/">
         <ProtectedRoute component={Dashboard} />
+      </Route>
+      <Route path="/schedules">
+        <ProtectedRoute component={() => <AdminPageWrapper Component={Schedules} />} />
       </Route>
       <Route path="/admin/volunteers">
         <ProtectedRoute component={() => <AdminPageWrapper Component={Volunteers} />} />

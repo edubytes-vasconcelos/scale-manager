@@ -9,13 +9,15 @@ import {
   UsersRound, 
   LogOut,
   Menu,
-  X
+  X,
+  ClipboardList
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/schedules", label: "Escalas", icon: ClipboardList },
   { path: "/admin/volunteers", label: "Voluntários", icon: Users, adminOnly: true },
   { path: "/admin/ministries", label: "Ministérios", icon: Church, adminOnly: true },
   { path: "/admin/event-types", label: "Tipos de Evento", icon: Calendar, adminOnly: true },
