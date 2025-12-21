@@ -9,13 +9,13 @@ AS $$
 DECLARE
   v_email text;
 BEGIN
-  -- Get the email from the authenticated user
-  v_email := auth.jwt() ->> 'email';
+  -- Get the email from the authenticated user (normalized to lowercase)
+  v_email := LOWER(TRIM(auth.jwt() ->> 'email'));
   
   -- Update any volunteer with matching email that has no auth_user_id
   UPDATE volunteers
   SET auth_user_id = auth.uid()
-  WHERE email = v_email
+  WHERE LOWER(TRIM(email)) = v_email
     AND (auth_user_id IS NULL OR auth_user_id = auth.uid());
 END;
 $$;
