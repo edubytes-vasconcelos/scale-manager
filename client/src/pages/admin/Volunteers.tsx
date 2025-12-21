@@ -77,7 +77,9 @@ export default function Volunteers() {
   };
 
   const handleAddVolunteer = async () => {
-    if (!newVolunteerEmail.trim()) {
+    const normalizedEmail = newVolunteerEmail.trim().toLowerCase();
+    
+    if (!normalizedEmail) {
       toast({
         title: "E-mail obrigatório",
         description: "Informe o e-mail do voluntário.",
@@ -88,14 +90,28 @@ export default function Volunteers() {
 
     if (!profile?.organizationId) return;
 
+    // Check if volunteer already exists with this email in this organization
+    const existingVolunteer = volunteers?.find(
+      v => v.email?.toLowerCase() === normalizedEmail
+    );
+    
+    if (existingVolunteer) {
+      toast({
+        title: "E-mail já cadastrado",
+        description: "Este e-mail já está cadastrado na sua organização.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const { error } = await supabase
         .from("volunteers")
         .insert({
           id: crypto.randomUUID(),
-          name: newVolunteerName.trim() || newVolunteerEmail.split("@")[0],
-          email: newVolunteerEmail.trim().toLowerCase(),
+          name: newVolunteerName.trim() || normalizedEmail.split("@")[0],
+          email: normalizedEmail,
           access_level: newVolunteerAccessLevel,
           organization_id: profile.organizationId,
         });

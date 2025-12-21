@@ -38,10 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   const fetchVolunteerProfile = useCallback(async (authUserId: string): Promise<VolunteerProfile | null> => {
+    // Fetch all matching profiles, prioritizing those with organization_id
     const { data, error } = await supabase
       .from("volunteers")
       .select("id, auth_user_id, organization_id, access_level, name, email")
       .eq("auth_user_id", authUserId)
+      .order("organization_id", { ascending: false, nullsFirst: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) {
