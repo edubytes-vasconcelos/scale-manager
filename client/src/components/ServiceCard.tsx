@@ -22,7 +22,7 @@ export function ServiceCard({ service }: ServiceCardProps) {
     setRsvpState("confirmed");
     toast({
       title: "Presença confirmada!",
-      description: `Você confirmou presença para ${service.name}.`,
+      description: `Você confirmou presença para ${service.title}.`,
       className: "bg-green-50 border-green-200 text-green-900",
     });
   };
@@ -37,7 +37,7 @@ export function ServiceCard({ service }: ServiceCardProps) {
               {formattedDate}
             </div>
             <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
-              {service.name}
+              {service.title}
             </h3>
           </div>
           
@@ -47,10 +47,6 @@ export function ServiceCard({ service }: ServiceCardProps) {
           </div>
         </div>
         
-        <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-          {service.description || "Nenhuma descrição disponível para este evento."}
-        </p>
-
         <div className="pt-4 border-t border-border/50 flex justify-end">
           <button
             onClick={handleRSVP}

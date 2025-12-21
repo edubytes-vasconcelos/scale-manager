@@ -45,11 +45,16 @@ export const eventTypes = pgTable("event_types", {
   color: text("color"),
 });
 
+// Ministry assignment type with leader flag
+export type MinistryAssignment = {
+  ministryId: string;
+  isLeader: boolean;
+};
+
 // Assignment type for services
 export type ServiceAssignment = {
   volunteerId?: string;
   teamId?: string;
-  role: string;
   status: "pending" | "confirmed" | "declined";
 };
 

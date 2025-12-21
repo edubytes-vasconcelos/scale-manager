@@ -1,24 +1,27 @@
-import { useState } from "react";
-import { useVolunteerProfile, useVolunteers, useEventTypes, useServices } from "@/hooks/use-data";
+import { useState, useMemo } from "react";
+import { useVolunteerProfile, useVolunteers, useEventTypes, useServices, useTeams } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Plus, Loader2, Users, User, Check, X, Clock, Edit2, Trash2 } from "lucide-react";
+import { CalendarDays, Plus, Loader2, Users, User, Check, X, Clock, Trash2, UsersRound, Repeat } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
+import { format, addDays, addWeeks, isBefore, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Service, ServiceAssignment, Volunteer } from "@shared/schema";
+import type { Service, ServiceAssignment, MinistryAssignment, Team } from "@shared/schema";
 
 export default function Schedules() {
   const { data: profile } = useVolunteerProfile();
   const { data: services, isLoading } = useServices(profile?.organizationId);
   const { data: volunteers } = useVolunteers(profile?.organizationId);
   const { data: eventTypes } = useEventTypes(profile?.organizationId);
+  const { data: teams } = useTeams(profile?.organizationId);
   const { toast } = useToast();
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -27,21 +30,106 @@ export default function Schedules() {
   const [isSaving, setIsSaving] = useState(false);
   
   const [newDate, setNewDate] = useState("");
-  const [newTitle, setNewTitle] = useState("");
   const [newEventTypeId, setNewEventTypeId] = useState("");
+  const [newCustomName, setNewCustomName] = useState("");
+  const [recurrenceType, setRecurrenceType] = useState<"none" | "daily" | "weekly">("none");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
   
+  const [assignmentType, setAssignmentType] = useState<"volunteer" | "team">("volunteer");
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
-  const [selectedRole, setSelectedRole] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState("");
 
-  const isAdminOrLeader = profile?.accessLevel === "admin" || profile?.accessLevel === "leader";
+  const isAdmin = profile?.accessLevel === "admin";
+  
+  const isLeaderInAnyMinistry = useMemo(() => {
+    if (!profile?.ministryAssignments) return false;
+    const assignments = profile.ministryAssignments as MinistryAssignment[];
+    return assignments.some(a => a.isLeader);
+  }, [profile?.ministryAssignments]);
+  
+  const isLeader = profile?.accessLevel === "leader" || isLeaderInAnyMinistry;
+  const isAdminOrLeader = isAdmin || isLeader;
+
+  const leaderMinistryIds = useMemo(() => {
+    if (!profile?.ministryAssignments) return [];
+    const assignments = profile.ministryAssignments as MinistryAssignment[];
+    return assignments.filter(a => a.isLeader).map(a => a.ministryId);
+  }, [profile?.ministryAssignments]);
+
+  const filteredVolunteers = useMemo(() => {
+    if (!volunteers) return [];
+    if (isAdmin) return volunteers;
+    
+    if (isLeader && leaderMinistryIds.length > 0) {
+      return volunteers.filter(v => {
+        if (!v.ministryAssignments) return false;
+        const vAssignments = v.ministryAssignments as MinistryAssignment[];
+        return vAssignments.some(a => leaderMinistryIds.includes(a.ministryId));
+      });
+    }
+    
+    return [];
+  }, [volunteers, isAdmin, isLeader, leaderMinistryIds]);
+
+  const filteredTeams = useMemo(() => {
+    if (!teams) return [];
+    if (isAdmin) return teams;
+    
+    if (isLeader && leaderMinistryIds.length > 0) {
+      return teams.filter(team => {
+        const memberIds = (team.memberIds || []) as string[];
+        if (memberIds.length === 0) return false;
+        
+        return memberIds.some(memberId => {
+          const volunteer = volunteers?.find(v => v.id === memberId);
+          if (!volunteer?.ministryAssignments) return false;
+          const vAssignments = volunteer.ministryAssignments as MinistryAssignment[];
+          return vAssignments.some(a => leaderMinistryIds.includes(a.ministryId));
+        });
+      });
+    }
+    
+    return [];
+  }, [teams, volunteers, isAdmin, isLeader, leaderMinistryIds]);
+
+  const getMaxEndDate = () => {
+    if (!newDate) return "";
+    const startDate = new Date(newDate);
+    if (recurrenceType === "daily") {
+      return format(addDays(startDate, 15), "yyyy-MM-dd");
+    } else if (recurrenceType === "weekly") {
+      return format(addMonths(startDate, 3), "yyyy-MM-dd");
+    }
+    return "";
+  };
+
+  const getMinEndDate = () => {
+    if (!newDate) return "";
+    const startDate = new Date(newDate);
+    if (recurrenceType === "daily") {
+      return format(addDays(startDate, 1), "yyyy-MM-dd");
+    } else if (recurrenceType === "weekly") {
+      return format(addWeeks(startDate, 1), "yyyy-MM-dd");
+    }
+    return "";
+  };
 
   const handleCreateService = async () => {
     if (!isAdminOrLeader) return;
     
-    if (!newDate || !newTitle.trim()) {
+    if (!newDate) {
       toast({
-        title: "Campos obrigatórios",
-        description: "Informe a data e o título do evento.",
+        title: "Campo obrigatório",
+        description: "Informe a data do evento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!newEventTypeId && !newCustomName.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Selecione um tipo de evento ou informe um nome personalizado.",
         variant: "destructive",
       });
       return;
@@ -49,32 +137,54 @@ export default function Schedules() {
 
     if (!profile?.organizationId) return;
 
+    const eventType = eventTypes?.find(e => e.id === newEventTypeId);
+    const title = newCustomName.trim() || eventType?.name || "Evento";
+
     setIsSaving(true);
     try {
+      const dates: string[] = [newDate];
+      
+      if (recurrenceType !== "none" && recurrenceEndDate) {
+        const startDate = new Date(newDate);
+        const endDate = new Date(recurrenceEndDate);
+        let currentDate = recurrenceType === "daily" 
+          ? addDays(startDate, 1) 
+          : addWeeks(startDate, 1);
+        
+        while (isBefore(currentDate, endDate) || format(currentDate, "yyyy-MM-dd") === recurrenceEndDate) {
+          dates.push(format(currentDate, "yyyy-MM-dd"));
+          currentDate = recurrenceType === "daily" 
+            ? addDays(currentDate, 1) 
+            : addWeeks(currentDate, 1);
+        }
+      }
+
+      const servicesToCreate = dates.map(date => ({
+        id: crypto.randomUUID(),
+        date,
+        title,
+        event_type_id: newEventTypeId || null,
+        organization_id: profile.organizationId,
+        assignments: [],
+        created_at: new Date().toISOString(),
+      }));
+
       const { error } = await supabase
         .from("services")
-        .insert({
-          id: crypto.randomUUID(),
-          date: newDate,
-          title: newTitle.trim(),
-          event_type_id: newEventTypeId || null,
-          organization_id: profile.organizationId,
-          assignments: [],
-          created_at: new Date().toISOString(),
-        });
+        .insert(servicesToCreate);
 
       if (error) throw error;
 
       toast({
-        title: "Escala criada!",
-        description: "A escala foi criada com sucesso.",
+        title: dates.length > 1 ? `${dates.length} escalas criadas!` : "Escala criada!",
+        description: dates.length > 1 
+          ? `As escalas foram criadas de ${format(new Date(dates[0]), "dd/MM")} até ${format(new Date(dates[dates.length - 1]), "dd/MM")}.`
+          : "A escala foi criada com sucesso.",
       });
 
       queryClient.invalidateQueries({ queryKey: ["services"] });
       setCreateDialogOpen(false);
-      setNewDate("");
-      setNewTitle("");
-      setNewEventTypeId("");
+      resetCreateForm();
     } catch (error: any) {
       toast({
         title: "Erro ao criar",
@@ -86,13 +196,31 @@ export default function Schedules() {
     }
   };
 
-  const handleAddVolunteer = async () => {
+  const resetCreateForm = () => {
+    setNewDate("");
+    setNewEventTypeId("");
+    setNewCustomName("");
+    setRecurrenceType("none");
+    setRecurrenceEndDate("");
+  };
+
+  const handleAddAssignment = async () => {
     if (!isAdminOrLeader) return;
+    if (!selectedService) return;
     
-    if (!selectedVolunteerId || !selectedRole.trim() || !selectedService) {
+    if (assignmentType === "volunteer" && !selectedVolunteerId) {
       toast({
-        title: "Campos obrigatórios",
-        description: "Selecione um voluntário e informe a função.",
+        title: "Campo obrigatório",
+        description: "Selecione um voluntário.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (assignmentType === "team" && !selectedTeamId) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Selecione uma equipe.",
         variant: "destructive",
       });
       return;
@@ -101,38 +229,100 @@ export default function Schedules() {
     setIsSaving(true);
     try {
       const currentAssignments = (selectedService.assignments || []) as ServiceAssignment[];
-      
-      const alreadyAssigned = currentAssignments.some(a => a.volunteerId === selectedVolunteerId);
-      if (alreadyAssigned) {
-        toast({
-          title: "Voluntário já escalado",
-          description: "Este voluntário já está nesta escala.",
-          variant: "destructive",
-        });
-        setIsSaving(false);
-        return;
+      let newAssignments: ServiceAssignment[] = [];
+
+      if (assignmentType === "volunteer") {
+        if (!isAdmin && !filteredVolunteers.some(v => v.id === selectedVolunteerId)) {
+          toast({
+            title: "Acesso negado",
+            description: "Você não tem permissão para escalar este voluntário.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+        
+        const alreadyAssigned = currentAssignments.some(a => a.volunteerId === selectedVolunteerId);
+        if (alreadyAssigned) {
+          toast({
+            title: "Voluntário já escalado",
+            description: "Este voluntário já está nesta escala.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+        newAssignments = [{
+          volunteerId: selectedVolunteerId,
+          status: "pending",
+        }];
+      } else {
+        if (!isAdmin && !filteredTeams.some(t => t.id === selectedTeamId)) {
+          toast({
+            title: "Acesso negado",
+            description: "Você não tem permissão para escalar esta equipe.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+        
+        const team = filteredTeams.find(t => t.id === selectedTeamId);
+        let memberIds = (team?.memberIds || []) as string[];
+        
+        if (memberIds.length === 0) {
+          toast({
+            title: "Equipe vazia",
+            description: "Esta equipe não possui membros cadastrados.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+        
+        if (!isAdmin && leaderMinistryIds.length > 0) {
+          memberIds = memberIds.filter(memberId => {
+            const volunteer = volunteers?.find(v => v.id === memberId);
+            if (!volunteer?.ministryAssignments) return false;
+            const vAssignments = volunteer.ministryAssignments as MinistryAssignment[];
+            return vAssignments.some(a => leaderMinistryIds.includes(a.ministryId));
+          });
+        }
+        
+        for (const memberId of memberIds) {
+          if (!currentAssignments.some(a => a.volunteerId === memberId)) {
+            newAssignments.push({
+              volunteerId: memberId,
+              status: "pending",
+            });
+          }
+        }
+
+        if (newAssignments.length === 0) {
+          toast({
+            title: "Todos já escalados",
+            description: "Todos os membros da equipe já estão nesta escala.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
       }
 
-      const newAssignment: ServiceAssignment = {
-        volunteerId: selectedVolunteerId,
-        role: selectedRole.trim(),
-        status: "pending",
-      };
+      const updatedAssignments = [...currentAssignments, ...newAssignments];
 
       const { error } = await supabase
         .from("services")
-        .update({
-          assignments: [...currentAssignments, newAssignment],
-        })
+        .update({ assignments: updatedAssignments })
         .eq("id", selectedService.id);
 
       if (error) throw error;
-
-      const updatedAssignments = [...currentAssignments, newAssignment];
       
       toast({
-        title: "Voluntário adicionado!",
-        description: "O voluntário foi escalado com sucesso.",
+        title: assignmentType === "team" ? "Equipe adicionada!" : "Voluntário adicionado!",
+        description: assignmentType === "team" 
+          ? `${newAssignments.length} membro(s) foram escalados.`
+          : "O voluntário foi escalado com sucesso.",
       });
 
       setSelectedService({
@@ -142,7 +332,7 @@ export default function Schedules() {
       
       queryClient.invalidateQueries({ queryKey: ["services"] });
       setSelectedVolunteerId("");
-      setSelectedRole("");
+      setSelectedTeamId("");
     } catch (error: any) {
       toast({
         title: "Erro ao adicionar",
@@ -337,7 +527,6 @@ export default function Schedules() {
                             <div className="flex items-center gap-2">
                               <User className="w-3 h-3 text-muted-foreground" />
                               <span>{getVolunteerName(assignment.volunteerId || "")}</span>
-                              <span className="text-muted-foreground">- {assignment.role}</span>
                             </div>
                             {getStatusBadge(assignment.status)}
                           </div>
@@ -370,7 +559,7 @@ export default function Schedules() {
       )}
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Nova Escala</DialogTitle>
             <DialogDescription>
@@ -383,23 +572,24 @@ export default function Schedules() {
               <Input
                 type="date"
                 value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
+                onChange={(e) => {
+                  setNewDate(e.target.value);
+                  setRecurrenceEndDate("");
+                }}
+                min={format(new Date(), "yyyy-MM-dd")}
                 data-testid="input-schedule-date"
               />
             </div>
+            
             <div className="space-y-2">
-              <label className="text-sm font-medium">Título</label>
-              <Input
-                type="text"
-                placeholder="Ex: Culto de Sábado"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                data-testid="input-schedule-title"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Tipo de Evento (opcional)</label>
-              <Select value={newEventTypeId} onValueChange={setNewEventTypeId}>
+              <label className="text-sm font-medium">Tipo de Evento</label>
+              <Select 
+                value={newEventTypeId} 
+                onValueChange={(val) => {
+                  setNewEventTypeId(val);
+                  if (val) setNewCustomName("");
+                }}
+              >
                 <SelectTrigger data-testid="select-event-type">
                   <SelectValue placeholder="Selecione um tipo" />
                 </SelectTrigger>
@@ -412,9 +602,79 @@ export default function Schedules() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex-1 h-px bg-border" />
+              <span>ou</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nome Personalizado</label>
+              <Input
+                type="text"
+                placeholder="Ex: Reunião Especial"
+                value={newCustomName}
+                onChange={(e) => {
+                  setNewCustomName(e.target.value);
+                  if (e.target.value) setNewEventTypeId("");
+                }}
+                data-testid="input-custom-name"
+              />
+            </div>
+
+            <div className="space-y-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-muted-foreground" />
+                <label className="text-sm font-medium">Recorrência</label>
+              </div>
+              <RadioGroup 
+                value={recurrenceType} 
+                onValueChange={(val) => {
+                  setRecurrenceType(val as "none" | "daily" | "weekly");
+                  setRecurrenceEndDate("");
+                }}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="none" id="none" />
+                  <Label htmlFor="none" className="text-sm">Única</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="daily" id="daily" />
+                  <Label htmlFor="daily" className="text-sm">Diária</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="weekly" id="weekly" />
+                  <Label htmlFor="weekly" className="text-sm">Semanal</Label>
+                </div>
+              </RadioGroup>
+
+              {recurrenceType !== "none" && newDate && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Até quando? 
+                    <span className="text-muted-foreground font-normal ml-1">
+                      (máx. {recurrenceType === "daily" ? "15 dias" : "3 meses"})
+                    </span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={recurrenceEndDate}
+                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                    min={getMinEndDate()}
+                    max={getMaxEndDate()}
+                    data-testid="input-recurrence-end"
+                  />
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setCreateDialogOpen(false);
+              resetCreateForm();
+            }}>
               Cancelar
             </Button>
             <Button onClick={handleCreateService} disabled={isSaving} data-testid="button-save-schedule">
@@ -440,34 +700,65 @@ export default function Schedules() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-2">
+            <RadioGroup 
+              value={assignmentType} 
+              onValueChange={(val) => setAssignmentType(val as "volunteer" | "team")}
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="volunteer" id="volunteer" />
+                <Label htmlFor="volunteer" className="text-sm flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" /> Voluntário
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="team" id="team" />
+                <Label htmlFor="team" className="text-sm flex items-center gap-1">
+                  <UsersRound className="w-3.5 h-3.5" /> Equipe
+                </Label>
+              </div>
+            </RadioGroup>
+
+            {assignmentType === "volunteer" ? (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Voluntário</label>
+                <label className="text-sm font-medium">Selecionar Voluntário</label>
                 <Select value={selectedVolunteerId} onValueChange={setSelectedVolunteerId}>
                   <SelectTrigger data-testid="select-volunteer">
-                    <SelectValue placeholder="Selecione" />
+                    <SelectValue placeholder="Selecione um voluntário" />
                   </SelectTrigger>
                   <SelectContent>
-                    {volunteers?.map((v) => (
+                    {filteredVolunteers.map((v) => (
                       <SelectItem key={v.id} value={v.id}>
                         {v.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {isLeader && filteredVolunteers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum voluntário vinculado aos seus ministérios.
+                  </p>
+                )}
               </div>
+            ) : (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Função</label>
-                <Input
-                  type="text"
-                  placeholder="Ex: Recepção"
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  data-testid="input-volunteer-role"
-                />
+                <label className="text-sm font-medium">Selecionar Equipe</label>
+                <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                  <SelectTrigger data-testid="select-team">
+                    <SelectValue placeholder="Selecione uma equipe" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredTeams.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} ({((t.memberIds || []) as string[]).length} membros)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <Button onClick={handleAddVolunteer} disabled={isSaving} className="w-full" data-testid="button-add-to-schedule">
+            )}
+
+            <Button onClick={handleAddAssignment} disabled={isSaving} className="w-full" data-testid="button-add-to-schedule">
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
@@ -486,7 +777,6 @@ export default function Schedules() {
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm font-medium">{getVolunteerName(assignment.volunteerId || "")}</span>
-                      <span className="text-sm text-muted-foreground">- {assignment.role}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {getStatusBadge(assignment.status)}

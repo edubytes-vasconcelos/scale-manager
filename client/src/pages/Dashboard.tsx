@@ -17,12 +17,6 @@ export default function Dashboard() {
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
   
-  const getMyRole = (service: any) => {
-    if (!service.assignments || !volunteer?.id) return null;
-    const assignment = service.assignments.find((a: any) => a.volunteerId === volunteer.id);
-    return assignment?.role || null;
-  };
-  
   const getMyStatus = (service: any) => {
     if (!service.assignments || !volunteer?.id) return null;
     const assignment = service.assignments.find((a: any) => a.volunteerId === volunteer.id);
@@ -148,11 +142,6 @@ export default function Dashboard() {
                         <CalendarDays className="w-3.5 h-3.5" />
                         {format(new Date(schedule.date), "EEEE, d 'de' MMMM", { locale: ptBR })}
                       </p>
-                      {getMyRole(schedule) && (
-                        <p className="text-sm font-medium text-primary">
-                          Função: {getMyRole(schedule)}
-                        </p>
-                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:self-center flex-wrap">

@@ -1,26 +1,29 @@
-import { useState } from "react";
-import { useVolunteerProfile, useVolunteers } from "@/hooks/use-data";
+import { useState, useMemo } from "react";
+import { useVolunteerProfile, useVolunteers, useMinistries } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Shield, UserCheck, UserCog, User, Loader2, Edit2, Plus } from "lucide-react";
+import { Users, Mail, Shield, UserCheck, UserCog, User, Loader2, Edit2, Plus, Church, Star } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import type { Volunteer } from "@shared/schema";
+import type { Volunteer, MinistryAssignment } from "@shared/schema";
 
 export default function Volunteers() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: volunteers, isLoading } = useVolunteers(profile?.organizationId);
+  const { data: ministries } = useMinistries(profile?.organizationId);
   const { toast } = useToast();
   
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
   const [newAccessLevel, setNewAccessLevel] = useState("volunteer");
+  const [ministryAssignments, setMinistryAssignments] = useState<MinistryAssignment[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   
   const [newVolunteerName, setNewVolunteerName] = useState("");
@@ -29,38 +32,70 @@ export default function Volunteers() {
 
   const isAdmin = profile?.accessLevel === "admin";
 
-  const getAccessLevelBadge = (level: string | null) => {
-    switch (level) {
-      case "admin":
-        return <Badge className="bg-purple-500/10 text-purple-700 border-purple-200"><Shield className="w-3 h-3 mr-1" />Admin</Badge>;
-      case "leader":
-        return <Badge className="bg-blue-500/10 text-blue-700 border-blue-200"><UserCog className="w-3 h-3 mr-1" />Líder</Badge>;
-      default:
-        return <Badge variant="secondary"><UserCheck className="w-3 h-3 mr-1" />Voluntário</Badge>;
+  const getAccessLevelBadge = (level: string | null, volunteerMinistryAssignments?: MinistryAssignment[]) => {
+    if (level === "admin") {
+      return <Badge className="bg-purple-500/10 text-purple-700 border-purple-200"><Shield className="w-3 h-3 mr-1" />Admin</Badge>;
     }
+    
+    const isLeaderInAny = volunteerMinistryAssignments?.some(a => a.isLeader);
+    if (level === "leader" || isLeaderInAny) {
+      return <Badge className="bg-blue-500/10 text-blue-700 border-blue-200"><UserCog className="w-3 h-3 mr-1" />Líder</Badge>;
+    }
+    
+    return <Badge variant="secondary"><UserCheck className="w-3 h-3 mr-1" />Voluntário</Badge>;
+  };
+
+  const getMinistryName = (ministryId: string) => {
+    const ministry = ministries?.find(m => m.id === ministryId);
+    return ministry?.name || "Desconhecido";
   };
 
   const handleEditClick = (volunteer: Volunteer) => {
     setSelectedVolunteer(volunteer);
     setNewAccessLevel(volunteer.accessLevel || "volunteer");
+    const assignments = (volunteer.ministryAssignments || []) as MinistryAssignment[];
+    setMinistryAssignments(assignments);
     setEditDialogOpen(true);
   };
 
-  const handleSaveAccessLevel = async () => {
+  const handleToggleMinistry = (ministryId: string) => {
+    const existing = ministryAssignments.find(a => a.ministryId === ministryId);
+    if (existing) {
+      setMinistryAssignments(ministryAssignments.filter(a => a.ministryId !== ministryId));
+    } else {
+      setMinistryAssignments([...ministryAssignments, { ministryId, isLeader: false }]);
+    }
+  };
+
+  const handleToggleLeader = (ministryId: string) => {
+    setMinistryAssignments(ministryAssignments.map(a => 
+      a.ministryId === ministryId ? { ...a, isLeader: !a.isLeader } : a
+    ));
+  };
+
+  const handleSaveVolunteer = async () => {
     if (!selectedVolunteer) return;
+    
+    const isLeaderInAny = ministryAssignments.some(a => a.isLeader);
+    const computedAccessLevel = newAccessLevel === "admin" 
+      ? "admin" 
+      : isLeaderInAny ? "leader" : "volunteer";
     
     setIsSaving(true);
     try {
       const { error } = await supabase
         .from("volunteers")
-        .update({ access_level: newAccessLevel })
+        .update({ 
+          access_level: computedAccessLevel,
+          ministry_assignments: ministryAssignments,
+        })
         .eq("id", selectedVolunteer.id);
 
       if (error) throw error;
 
       toast({
         title: "Sucesso",
-        description: "Nível de acesso atualizado!",
+        description: "Voluntário atualizado!",
       });
 
       queryClient.invalidateQueries({ queryKey: ["volunteers"] });
@@ -90,7 +125,6 @@ export default function Volunteers() {
 
     if (!profile?.organizationId) return;
 
-    // Check if volunteer already exists with this email in this organization
     const existingVolunteer = volunteers?.find(
       v => v.email?.toLowerCase() === normalizedEmail
     );
@@ -114,6 +148,7 @@ export default function Volunteers() {
           email: normalizedEmail,
           access_level: newVolunteerAccessLevel,
           organization_id: profile.organizationId,
+          ministry_assignments: [],
         });
 
       if (error) throw error;
@@ -172,48 +207,63 @@ export default function Volunteers() {
         </div>
       ) : volunteers && volunteers.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {volunteers.map((volunteer) => (
-            <Card key={volunteer.id} data-testid={`card-volunteer-${volunteer.id}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary" />
+          {volunteers.map((volunteer) => {
+            const vAssignments = (volunteer.ministryAssignments || []) as MinistryAssignment[];
+            const leaderMinistries = vAssignments.filter(a => a.isLeader);
+            
+            return (
+              <Card key={volunteer.id} data-testid={`card-volunteer-${volunteer.id}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <User className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">{volunteer.name}</CardTitle>
+                        {volunteer.email && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Mail className="w-3 h-3" />
+                            {volunteer.email}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base">{volunteer.name}</CardTitle>
-                      {volunteer.email && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Mail className="w-3 h-3" />
-                          {volunteer.email}
-                        </p>
-                      )}
-                    </div>
+                    {isAdmin && (
+                      <Button 
+                        size="icon" 
+                        variant="ghost"
+                        onClick={() => handleEditClick(volunteer)}
+                        data-testid={`button-edit-volunteer-${volunteer.id}`}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => handleEditClick(volunteer)}
-                      data-testid={`button-edit-volunteer-${volunteer.id}`}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    {getAccessLevelBadge(volunteer.accessLevel, vAssignments)}
+                    {!volunteer.authUserId && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 bg-amber-50">
+                        Pendente
+                      </Badge>
+                    )}
+                  </div>
+                  {leaderMinistries.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {leaderMinistries.map((a) => (
+                        <Badge key={a.ministryId} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                          <Star className="w-2.5 h-2.5 mr-1" />
+                          {getMinistryName(a.ministryId)}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between gap-2">
-                  {getAccessLevelBadge(volunteer.accessLevel)}
-                  {!volunteer.authUserId && (
-                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 bg-amber-50">
-                      Pendente
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card className="border-dashed">
@@ -230,16 +280,16 @@ export default function Volunteers() {
       )}
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Voluntário</DialogTitle>
             <DialogDescription>
-              Altere o nível de acesso de {selectedVolunteer?.name}
+              Configure os ministérios e permissões de {selectedVolunteer?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Nível de Acesso</label>
+              <label className="text-sm font-medium">Nível de Acesso Base</label>
               <Select
                 value={newAccessLevel}
                 onValueChange={setNewAccessLevel}
@@ -249,17 +299,66 @@ export default function Volunteers() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="volunteer">Voluntário</SelectItem>
-                  <SelectItem value="leader">Líder</SelectItem>
                   <SelectItem value="admin">Administrador</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Selecione "Admin" para acesso total ou configure liderança por ministério abaixo.
+              </p>
             </div>
+
+            {ministries && ministries.length > 0 && (
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center gap-2">
+                  <Church className="w-4 h-4 text-muted-foreground" />
+                  <label className="text-sm font-medium">Ministérios</label>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {ministries.map((ministry) => {
+                    const assignment = ministryAssignments.find(a => a.ministryId === ministry.id);
+                    const isAssigned = !!assignment;
+                    const isLeader = assignment?.isLeader || false;
+                    
+                    return (
+                      <div key={ministry.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id={`ministry-${ministry.id}`}
+                            checked={isAssigned}
+                            onCheckedChange={() => handleToggleMinistry(ministry.id)}
+                            data-testid={`checkbox-ministry-${ministry.id}`}
+                          />
+                          <label htmlFor={`ministry-${ministry.id}`} className="text-sm cursor-pointer">
+                            {ministry.name}
+                          </label>
+                        </div>
+                        {isAssigned && (
+                          <Button
+                            size="sm"
+                            variant={isLeader ? "default" : "outline"}
+                            className={isLeader ? "bg-blue-600" : ""}
+                            onClick={() => handleToggleLeader(ministry.id)}
+                            data-testid={`button-leader-${ministry.id}`}
+                          >
+                            <Star className="w-3 h-3 mr-1" />
+                            {isLeader ? "Líder" : "Membro"}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Líderes podem criar escalas e gerenciar voluntários do seu ministério.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveAccessLevel} disabled={isSaving} data-testid="button-save-access">
+            <Button onClick={handleSaveVolunteer} disabled={isSaving} data-testid="button-save-access">
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -313,10 +412,12 @@ export default function Volunteers() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="volunteer">Voluntário</SelectItem>
-                  <SelectItem value="leader">Líder</SelectItem>
                   <SelectItem value="admin">Administrador</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Você pode configurar ministérios e liderança após o cadastro.
+              </p>
             </div>
           </div>
           <DialogFooter>
