@@ -50,13 +50,12 @@ BEGIN
     -- Update existing volunteer
     UPDATE volunteers
     SET organization_id = v_org_id,
-        access_level = 'admin',
-        can_lead = true
+        access_level = 'admin'
     WHERE auth_user_id = auth.uid();
   ELSE
     -- Create new volunteer as admin
-    INSERT INTO volunteers (id, auth_user_id, organization_id, access_level, can_lead, name, email, created_at)
-    VALUES (v_volunteer_id, auth.uid(), v_org_id, 'admin', true, v_user_name, v_email, now());
+    INSERT INTO volunteers (id, auth_user_id, organization_id, access_level, name, email, created_at)
+    VALUES (v_volunteer_id, auth.uid(), v_org_id, 'admin', v_user_name, v_email, now());
   END IF;
   
   RETURN v_org_id;
