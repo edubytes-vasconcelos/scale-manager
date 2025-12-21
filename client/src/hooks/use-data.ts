@@ -184,11 +184,13 @@ export function useUpdateAssignmentStatus() {
     mutationFn: async ({ 
       serviceId, 
       volunteerId, 
-      status 
+      status,
+      note
     }: { 
       serviceId: string; 
       volunteerId: string; 
       status: "confirmed" | "declined" | "pending";
+      note?: string;
     }) => {
       const { data: service, error: fetchError } = await supabase
         .from("services")
@@ -200,7 +202,7 @@ export function useUpdateAssignmentStatus() {
 
       const assignments = (service.assignments || []) as any[];
       const updatedAssignments = assignments.map((a: any) => 
-        a.volunteerId === volunteerId ? { ...a, status } : a
+        a.volunteerId === volunteerId ? { ...a, status, ...(note ? { note } : {}) } : a
       );
 
       const { error: updateError } = await supabase

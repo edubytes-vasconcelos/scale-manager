@@ -10,7 +10,9 @@ import {
   LogOut,
   Menu,
   X,
-  ClipboardList
+  ClipboardList,
+  ChevronRight,
+  Home
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -18,11 +20,34 @@ import { useState } from "react";
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/schedules", label: "Escalas", icon: ClipboardList },
-  { path: "/admin/volunteers", label: "Voluntários", icon: Users, adminOnly: true },
-  { path: "/admin/ministries", label: "Ministérios", icon: Church, adminOnly: true },
-  { path: "/admin/event-types", label: "Tipos de Evento", icon: Calendar, adminOnly: true },
-  { path: "/admin/teams", label: "Equipes", icon: UsersRound, adminOnly: true },
+  { path: "/admin/volunteers", label: "Voluntários", icon: Users, adminOnly: true, breadcrumb: ["Admin", "Voluntários"] },
+  { path: "/admin/ministries", label: "Ministérios", icon: Church, adminOnly: true, breadcrumb: ["Admin", "Ministérios"] },
+  { path: "/admin/event-types", label: "Tipos de Evento", icon: Calendar, adminOnly: true, breadcrumb: ["Admin", "Tipos de Evento"] },
+  { path: "/admin/teams", label: "Equipes", icon: UsersRound, adminOnly: true, breadcrumb: ["Admin", "Equipes"] },
 ];
+
+function Breadcrumbs({ location }: { location: string }) {
+  const currentNav = navItems.find(item => item.path === location);
+  if (!currentNav?.breadcrumb) return null;
+  
+  return (
+    <div className="flex items-center gap-1.5 text-sm text-muted-foreground px-6 py-3 bg-white border-b">
+      <Link href="/">
+        <span className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer">
+          <Home className="w-4 h-4" />
+        </span>
+      </Link>
+      {currentNav.breadcrumb.map((crumb, idx) => (
+        <span key={idx} className="flex items-center gap-1.5">
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className={idx === currentNav.breadcrumb!.length - 1 ? "text-foreground font-medium" : ""}>
+            {crumb}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { signOut } = useAuth();
@@ -88,14 +113,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link key={item.path} href={item.path}>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     isActive 
                       ? "bg-primary/10 text-primary" 
                       : "text-muted-foreground hover:bg-slate-100 hover:text-foreground"
                   }`}
                   data-testid={`nav-mobile-${item.path.replace(/\//g, "-")}`}
                 >
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-6 h-6" />
                   {item.label}
                 </button>
               </Link>
@@ -133,7 +158,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     }`}
                     data-testid={`nav-${item.path.replace(/\//g, "-")}`}
                   >
-                    <Icon className="w-5 h-5" />
+                    <Icon className="w-[22px] h-[22px]" />
                     {item.label}
                   </button>
                 </Link>
@@ -159,8 +184,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-h-screen">
-          {children}
+        <main className="flex-1 min-h-screen flex flex-col">
+          <Breadcrumbs location={location} />
+          <div className="flex-1">
+            {children}
+          </div>
         </main>
       </div>
     </div>

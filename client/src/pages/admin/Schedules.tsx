@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useVolunteerProfile, useVolunteers, useEventTypes, useServices, useTeams } from "@/hooks/use-data";
+import { useVolunteerProfile, useVolunteers, useEventTypes, useServices, useTeams, useMinistries } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, Plus, Loader2, Users, User, Check, X, Clock, Trash2, UsersRound, Repeat } from "lucide-react";
+import { CalendarDays, Plus, Loader2, Users, User, Check, X, Clock, Trash2, UsersRound, Repeat, Filter, CheckCircle2, List, Grid, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
-import { format, addDays, addWeeks, isBefore, addMonths } from "date-fns";
+import { format, addDays, addWeeks, isBefore, addMonths, isAfter, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay, subMonths, startOfWeek, endOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Service, ServiceAssignment, MinistryAssignment, Team } from "@shared/schema";
 
@@ -22,6 +22,7 @@ export default function Schedules() {
   const { data: volunteers } = useVolunteers(profile?.organizationId);
   const { data: eventTypes } = useEventTypes(profile?.organizationId);
   const { data: teams } = useTeams(profile?.organizationId);
+  const { data: ministries } = useMinistries(profile?.organizationId);
   const { toast } = useToast();
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -38,6 +39,14 @@ export default function Schedules() {
   const [assignmentType, setAssignmentType] = useState<"volunteer" | "team">("volunteer");
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
+  
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "confirmed" | "declined">("all");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterEventType, setFilterEventType] = useState("all");
+  
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const isAdmin = profile?.accessLevel === "admin";
   
@@ -91,6 +100,67 @@ export default function Schedules() {
     
     return [];
   }, [teams, volunteers, isAdmin, isLeader, leaderMinistryIds]);
+
+  const filteredServices = useMemo(() => {
+    if (!services) return [];
+    
+    return services.filter(service => {
+      const assignments = (service.assignments || []) as ServiceAssignment[];
+      
+      if (filterStatus !== "all") {
+        const hasStatusMatch = assignments.some(a => a.status === filterStatus);
+        if (!hasStatusMatch && assignments.length > 0) return false;
+        if (assignments.length === 0 && filterStatus !== "pending") return false;
+      }
+      
+      if (filterDateFrom) {
+        const serviceDate = parseISO(service.date);
+        const fromDate = parseISO(filterDateFrom);
+        if (isBefore(serviceDate, fromDate)) return false;
+      }
+      
+      if (filterDateTo) {
+        const serviceDate = parseISO(service.date);
+        const toDate = parseISO(filterDateTo);
+        if (isAfter(serviceDate, toDate)) return false;
+      }
+      
+      if (filterEventType !== "all" && service.eventTypeId !== filterEventType) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [services, filterStatus, filterDateFrom, filterDateTo, filterEventType]);
+
+  const getConfirmationStats = (assignments: ServiceAssignment[]) => {
+    const confirmed = assignments.filter(a => a.status === "confirmed").length;
+    const total = assignments.length;
+    return { confirmed, total };
+  };
+
+  const clearFilters = () => {
+    setFilterStatus("all");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setFilterEventType("all");
+  };
+
+  const hasActiveFilters = filterStatus !== "all" || filterDateFrom || filterDateTo || filterEventType !== "all";
+
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(calendarMonth);
+    const monthEnd = endOfMonth(calendarMonth);
+    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+    return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+  }, [calendarMonth]);
+
+  const getServicesForDay = (day: Date) => {
+    return filteredServices?.filter(service => 
+      isSameDay(parseISO(service.date), day)
+    ) || [];
+  };
 
   const getMaxEndDate = () => {
     if (!newDate) return "";
@@ -416,11 +486,26 @@ export default function Schedules() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "confirmed":
-        return <Badge className="bg-green-500/10 text-green-700 border-green-200"><Check className="w-3 h-3 mr-1" />Confirmado</Badge>;
+        return (
+          <Badge className="bg-green-100 text-green-800 border-green-300" aria-label="Status: Confirmado">
+            <Check className="w-3 h-3 mr-1" aria-hidden="true" />
+            Confirmado
+          </Badge>
+        );
       case "declined":
-        return <Badge className="bg-red-500/10 text-red-700 border-red-200"><X className="w-3 h-3 mr-1" />Recusado</Badge>;
+        return (
+          <Badge className="bg-red-100 text-red-800 border-red-300" aria-label="Status: Recusado">
+            <X className="w-3 h-3 mr-1" aria-hidden="true" />
+            Recusado
+          </Badge>
+        );
       default:
-        return <Badge className="bg-amber-500/10 text-amber-700 border-amber-200"><Clock className="w-3 h-3 mr-1" />Pendente</Badge>;
+        return (
+          <Badge className="bg-amber-100 text-amber-800 border-amber-300" aria-label="Status: Pendente">
+            <Clock className="w-3 h-3 mr-1" aria-hidden="true" />
+            Pendente
+          </Badge>
+        );
     }
   };
 
@@ -443,7 +528,7 @@ export default function Schedules() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className="text-sm">
-            {services?.length || 0} escalas
+            {filteredServices?.length || 0} de {services?.length || 0} escalas
           </Badge>
           {isAdminOrLeader && (
             <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-create-schedule">
@@ -454,17 +539,191 @@ export default function Schedules() {
         </div>
       </div>
 
+      {/* Filters Section */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">Filtros</span>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="ml-auto text-muted-foreground">
+              Limpar filtros
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Status</Label>
+            <Select value={filterStatus} onValueChange={(v: any) => setFilterStatus(v)}>
+              <SelectTrigger data-testid="filter-status">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="pending">Pendentes</SelectItem>
+                <SelectItem value="confirmed">Confirmados</SelectItem>
+                <SelectItem value="declined">Recusados</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Tipo de Evento</Label>
+            <Select value={filterEventType} onValueChange={setFilterEventType}>
+              <SelectTrigger data-testid="filter-event-type">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                {eventTypes?.map((et) => (
+                  <SelectItem key={et.id} value={et.id}>{et.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Data Início</Label>
+            <Input 
+              type="date" 
+              value={filterDateFrom} 
+              onChange={(e) => setFilterDateFrom(e.target.value)}
+              data-testid="filter-date-from"
+            />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Data Fim</Label>
+            <Input 
+              type="date" 
+              value={filterDateTo} 
+              onChange={(e) => setFilterDateTo(e.target.value)}
+              data-testid="filter-date-to"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* View Mode Toggle */}
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant={viewMode === "list" ? "default" : "outline"}
+          onClick={() => setViewMode("list")}
+          data-testid="button-view-list"
+        >
+          <List className="w-4 h-4 mr-1" />
+          Lista
+        </Button>
+        <Button
+          size="sm"
+          variant={viewMode === "calendar" ? "default" : "outline"}
+          onClick={() => setViewMode("calendar")}
+          data-testid="button-view-calendar"
+        >
+          <CalendarDays className="w-4 h-4 mr-1" />
+          Calendário
+        </Button>
+      </div>
+
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-48 rounded-xl bg-slate-100 animate-pulse" />
           ))}
         </div>
-      ) : services && services.length > 0 ? (
+      ) : viewMode === "calendar" ? (
+        /* Calendar View */
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {/* Calendar Header */}
+          <div className="flex items-center justify-between p-4 border-b">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+              data-testid="button-prev-month"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <h3 className="text-lg font-semibold capitalize">
+              {format(calendarMonth, "MMMM yyyy", { locale: ptBR })}
+            </h3>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))}
+              data-testid="button-next-month"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </Button>
+          </div>
+
+          {/* Weekday Headers */}
+          <div className="grid grid-cols-7 border-b bg-slate-50">
+            {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => (
+              <div key={day} className="py-2 text-center text-xs font-medium text-muted-foreground">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Calendar Days */}
+          <div className="grid grid-cols-7">
+            {calendarDays.map((day, idx) => {
+              const dayServices = getServicesForDay(day);
+              const isCurrentMonth = isSameMonth(day, calendarMonth);
+              const isToday = isSameDay(day, new Date());
+              
+              return (
+                <div
+                  key={idx}
+                  className={`min-h-[100px] border-b border-r p-1 ${
+                    !isCurrentMonth ? "bg-slate-50" : ""
+                  } ${idx % 7 === 6 ? "border-r-0" : ""}`}
+                >
+                  <div className={`text-right text-sm p-1 ${
+                    isToday ? "bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center ml-auto" : ""
+                  } ${!isCurrentMonth ? "text-muted-foreground" : ""}`}>
+                    {format(day, "d")}
+                  </div>
+                  <div className="space-y-1 mt-1">
+                    {dayServices.slice(0, 2).map((service) => {
+                      const eventType = eventTypes?.find(e => e.id === service.eventTypeId);
+                      const assignments = (service.assignments || []) as ServiceAssignment[];
+                      const stats = getConfirmationStats(assignments);
+                      return (
+                        <div
+                          key={service.id}
+                          onClick={() => isAdminOrLeader && openAssignDialog(service)}
+                          className={`text-xs p-1.5 rounded truncate ${
+                            isAdminOrLeader ? "cursor-pointer" : ""
+                          } ${
+                            stats.total > 0 && stats.confirmed === stats.total
+                              ? "bg-green-100 text-green-800"
+                              : stats.confirmed > 0
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-primary/10 text-primary"
+                          }`}
+                          title={service.title}
+                          data-testid={`calendar-service-${service.id}`}
+                        >
+                          {service.title}
+                        </div>
+                      );
+                    })}
+                    {dayServices.length > 2 && (
+                      <div className="text-xs text-muted-foreground text-center">
+                        +{dayServices.length - 2} mais
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : filteredServices && filteredServices.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {services.map((service) => {
+          {filteredServices.map((service) => {
             const eventType = eventTypes?.find(e => e.id === service.eventTypeId);
             const assignments = (service.assignments || []) as ServiceAssignment[];
+            const stats = getConfirmationStats(assignments);
             
             return (
               <Card key={service.id} data-testid={`card-schedule-${service.id}`}>
@@ -516,19 +775,40 @@ export default function Schedules() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Users className="w-4 h-4" />
-                      <span>{assignments.length} voluntário(s) escalado(s)</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Users className="w-4 h-4" />
+                        <span>{assignments.length} voluntário(s)</span>
+                      </div>
+                      {stats.total > 0 && (
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
+                          stats.confirmed === stats.total 
+                            ? "bg-green-100 text-green-700" 
+                            : stats.confirmed > 0 
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-slate-100 text-slate-600"
+                        }`}>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {stats.confirmed}/{stats.total} confirmados
+                        </div>
+                      )}
                     </div>
                     {assignments.length > 0 && (
-                      <div className="space-y-1 pt-2 border-t">
+                      <div className="space-y-1.5 pt-2 border-t">
                         {assignments.slice(0, 3).map((assignment, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <User className="w-3 h-3 text-muted-foreground" />
-                              <span>{getVolunteerName(assignment.volunteerId || "")}</span>
+                          <div key={idx} className="text-sm">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <User className="w-3 h-3 text-muted-foreground" />
+                                <span>{getVolunteerName(assignment.volunteerId || "")}</span>
+                              </div>
+                              {getStatusBadge(assignment.status)}
                             </div>
-                            {getStatusBadge(assignment.status)}
+                            {assignment.note && assignment.status === "declined" && (
+                              <p className="text-xs text-muted-foreground ml-5 mt-0.5 italic">
+                                Motivo: {assignment.note}
+                              </p>
+                            )}
                           </div>
                         ))}
                         {assignments.length > 3 && (

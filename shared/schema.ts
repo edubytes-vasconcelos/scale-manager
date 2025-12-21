@@ -56,6 +56,7 @@ export type ServiceAssignment = {
   volunteerId?: string;
   teamId?: string;
   status: "pending" | "confirmed" | "declined";
+  note?: string;
 };
 
 // Mirrors the existing Supabase 'services' table

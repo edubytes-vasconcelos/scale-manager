@@ -1,9 +1,13 @@
+import { useState, useMemo } from "react";
 import { useVolunteerProfile, useServices, useMySchedules, useUpdateAssignmentStatus } from "@/hooks/use-data";
 import { ServiceCard } from "@/components/ServiceCard";
-import { CalendarDays, User, Building2, ClipboardCheck, Check, X, Loader2 } from "lucide-react";
+import { CalendarDays, User, Building2, ClipboardCheck, Check, X, Loader2, Clock, AlertCircle, Calendar, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { format, isAfter, isBefore, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
@@ -14,8 +18,37 @@ export default function Dashboard() {
   const { data: services, isLoading: loadingServices } = useServices(volunteer?.organizationId);
   const { data: mySchedules, isLoading: loadingMySchedules } = useMySchedules(volunteer?.id, volunteer?.organizationId);
   const updateStatus = useUpdateAssignmentStatus();
+  
+  const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
+  const [declineNote, setDeclineNote] = useState("");
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
+  
+  const pendingSchedules = useMemo(() => {
+    if (!mySchedules || !volunteer?.id) return [];
+    return mySchedules.filter(schedule => {
+      const assignment = schedule.assignments?.find((a: any) => a.volunteerId === volunteer.id);
+      return assignment?.status === "pending";
+    });
+  }, [mySchedules, volunteer?.id]);
+  
+  const confirmedSchedules = useMemo(() => {
+    if (!mySchedules || !volunteer?.id) return [];
+    return mySchedules.filter(schedule => {
+      const assignment = schedule.assignments?.find((a: any) => a.volunteerId === volunteer.id);
+      return assignment?.status === "confirmed";
+    });
+  }, [mySchedules, volunteer?.id]);
+  
+  const nextSchedule = useMemo(() => {
+    if (!mySchedules || mySchedules.length === 0) return null;
+    const today = new Date();
+    const futureSchedules = mySchedules
+      .filter(s => isAfter(new Date(s.date), addDays(today, -1)))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return futureSchedules[0] || null;
+  }, [mySchedules]);
   
   const getMyStatus = (service: any) => {
     if (!service.assignments || !volunteer?.id) return null;
@@ -38,6 +71,41 @@ export default function Dashboard() {
           ? "Você confirmou sua participação neste evento."
           : "Você recusou participar deste evento.",
       });
+      setDeclineDialogOpen(false);
+      setDeclineNote("");
+      setSelectedScheduleId(null);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar sua confirmação.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const openDeclineDialog = (scheduleId: string) => {
+    setSelectedScheduleId(scheduleId);
+    setDeclineNote("");
+    setDeclineDialogOpen(true);
+  };
+  
+  const handleDeclineWithNote = async () => {
+    if (!selectedScheduleId || !volunteer?.id) return;
+    
+    try {
+      await updateStatus.mutateAsync({ 
+        serviceId: selectedScheduleId, 
+        volunteerId: volunteer.id, 
+        status: "declined",
+        note: declineNote.trim() || undefined
+      });
+      toast({
+        title: "Presença recusada",
+        description: "Você recusou participar deste evento.",
+      });
+      setDeclineDialogOpen(false);
+      setDeclineNote("");
+      setSelectedScheduleId(null);
     } catch (error) {
       toast({
         title: "Erro",
@@ -54,11 +122,26 @@ export default function Dashboard() {
     
     switch (assignment.status) {
       case 'confirmed':
-        return <Badge variant="default" className="bg-green-500/10 text-green-700 border-green-200">Confirmado</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800 border-green-300" aria-label="Status: Confirmado">
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+            Confirmado
+          </Badge>
+        );
       case 'pending':
-        return <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 border-amber-200">Pendente</Badge>;
+        return (
+          <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300" aria-label="Status: Pendente">
+            <Clock className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+            Pendente
+          </Badge>
+        );
       case 'declined':
-        return <Badge variant="destructive" className="bg-red-500/10 text-red-700 border-red-200">Recusado</Badge>;
+        return (
+          <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-300" aria-label="Status: Recusado">
+            <X className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+            Recusado
+          </Badge>
+        );
       default:
         return null;
     }
@@ -97,6 +180,74 @@ export default function Dashboard() {
           <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 rounded-full bg-white/10 blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-60 h-60 rounded-full bg-black/10 blur-3xl pointer-events-none" />
         </section>
+
+        {/* Summary Cards */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border-l-4 border-l-amber-500" data-testid="card-pending-count">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{pendingSchedules.length}</p>
+                <p className="text-sm text-muted-foreground">Pendentes</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-l-4 border-l-green-500" data-testid="card-confirmed-count">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{confirmedSchedules.length}</p>
+                <p className="text-sm text-muted-foreground">Confirmadas</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-l-4 border-l-blue-500" data-testid="card-total-count">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <CalendarDays className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{mySchedules?.length || 0}</p>
+                <p className="text-sm text-muted-foreground">Total Escalas</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {nextSchedule && (
+            <Card className="border-l-4 border-l-primary bg-primary/5" data-testid="card-next-schedule">
+              <CardContent className="p-4">
+                <p className="text-xs font-medium text-primary uppercase mb-1">Próximo Compromisso</p>
+                <p className="font-semibold text-foreground truncate">{nextSchedule.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {format(new Date(nextSchedule.date), "d 'de' MMM", { locale: ptBR })}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </section>
+
+        {/* Notification Banner for Pending */}
+        {pendingSchedules.length > 0 && (
+          <section className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-4" data-testid="banner-pending">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-amber-800">
+                Você tem {pendingSchedules.length} escala{pendingSchedules.length > 1 ? 's' : ''} aguardando confirmação
+              </p>
+              <p className="text-sm text-amber-700">
+                Confirme ou recuse sua participação para ajudar os líderes a organizar os eventos.
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* My Schedules Section */}
         <section className="space-y-6">
@@ -144,36 +295,34 @@ export default function Dashboard() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 sm:self-center flex-wrap">
+                  <div className="flex items-center gap-3 sm:self-center flex-wrap">
                     {getMyStatus(schedule) === "pending" ? (
                       <>
                         <Button
-                          size="sm"
                           variant="default"
-                          className="bg-green-600 hover:bg-green-700"
+                          className="bg-green-600 hover:bg-green-700 min-h-[44px] px-6"
                           onClick={() => handleConfirm(schedule.id, "confirmed")}
                           disabled={updateStatus.isPending}
                           data-testid={`button-confirm-${schedule.id}`}
                         >
                           {updateStatus.isPending ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Loader2 className="w-5 h-5 animate-spin" />
                           ) : (
                             <>
-                              <Check className="w-4 h-4 mr-1" />
-                              Confirmar
+                              <Check className="w-5 h-5 mr-2" />
+                              Confirmar Presença
                             </>
                           )}
                         </Button>
                         <Button
-                          size="sm"
                           variant="outline"
-                          className="text-red-600 border-red-200 hover:bg-red-50"
-                          onClick={() => handleConfirm(schedule.id, "declined")}
+                          className="text-red-600 border-red-300 hover:bg-red-50 min-h-[44px] px-6"
+                          onClick={() => openDeclineDialog(schedule.id)}
                           disabled={updateStatus.isPending}
                           data-testid={`button-decline-${schedule.id}`}
                         >
-                          <X className="w-4 h-4 mr-1" />
-                          Recusar
+                          <X className="w-5 h-5 mr-2" />
+                          Não Poderei Ir
                         </Button>
                       </>
                     ) : (
@@ -228,6 +377,49 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {/* Decline Dialog with Note */}
+      <Dialog open={declineDialogOpen} onOpenChange={setDeclineDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Ausência</DialogTitle>
+            <DialogDescription>
+              Informe ao líder o motivo pelo qual você não poderá participar deste evento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="Ex: Estarei viajando nesta data... (opcional)"
+              value={declineNote}
+              onChange={(e) => setDeclineNote(e.target.value)}
+              className="min-h-[100px]"
+              data-testid="input-decline-note"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeclineDialogOpen(false)}
+              data-testid="button-cancel-decline"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeclineWithNote}
+              disabled={updateStatus.isPending}
+              data-testid="button-confirm-decline"
+            >
+              {updateStatus.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <X className="w-4 h-4 mr-2" />
+              )}
+              Confirmar Ausência
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
