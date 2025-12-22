@@ -201,9 +201,18 @@ export function useUpdateAssignmentStatus() {
       if (fetchError) throw fetchError;
 
       const assignments = (service.assignments || []) as any[];
-      const updatedAssignments = assignments.map((a: any) => 
-        a.volunteerId === volunteerId ? { ...a, status, ...(note ? { note } : {}) } : a
-      );
+      const updatedAssignments = assignments.map((a: any) => {
+        if (a.volunteerId === volunteerId) {
+          const updated: any = { ...a, status };
+          if (note) {
+            updated.note = note;
+          } else if (status !== "declined") {
+            delete updated.note;
+          }
+          return updated;
+        }
+        return a;
+      });
 
       const { error: updateError } = await supabase
         .from("services")
@@ -211,10 +220,12 @@ export function useUpdateAssignmentStatus() {
         .eq("id", serviceId);
 
       if (updateError) throw updateError;
+      
+      return { serviceId, updatedAssignments };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["services"] });
-      queryClient.invalidateQueries({ queryKey: ["my-schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["services"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["my-schedules"], refetchType: "all" });
     },
   });
 }
@@ -298,6 +309,49 @@ export function useCreateEventType() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event_types"] });
+    },
+  });
+}
+
+export function useCreateTeam() {
+  return useMutation({
+    mutationFn: async (team: {
+      name: string;
+      memberIds: string[];
+      organizationId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("teams")
+        .insert({
+          id: crypto.randomUUID(),
+          name: team.name,
+          member_ids: team.memberIds,
+          organization_id: team.organizationId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+  });
+}
+
+export function useDeleteTeam() {
+  return useMutation({
+    mutationFn: async (teamId: string) => {
+      const { error } = await supabase
+        .from("teams")
+        .delete()
+        .eq("id", teamId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
     },
   });
 }

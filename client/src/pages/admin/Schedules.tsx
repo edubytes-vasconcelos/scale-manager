@@ -33,6 +33,7 @@ export default function Schedules() {
   const [newDate, setNewDate] = useState("");
   const [newEventTypeId, setNewEventTypeId] = useState("");
   const [newCustomName, setNewCustomName] = useState("");
+  const [newMinistryId, setNewMinistryId] = useState("");
   const [recurrenceType, setRecurrenceType] = useState<"none" | "daily" | "weekly">("none");
   const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
   
@@ -205,6 +206,15 @@ export default function Schedules() {
       return;
     }
 
+    if (isLeader && !isAdmin && (!newMinistryId || newMinistryId === "none")) {
+      toast({
+        title: "Ministério obrigatório",
+        description: "Líderes devem vincular a escala a um ministério.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!profile?.organizationId) return;
 
     const eventType = eventTypes?.find(e => e.id === newEventTypeId);
@@ -234,6 +244,7 @@ export default function Schedules() {
         date,
         title,
         event_type_id: newEventTypeId || null,
+        ministry_id: newMinistryId && newMinistryId !== "none" ? newMinistryId : null,
         organization_id: profile.organizationId,
         assignments: [],
         created_at: new Date().toISOString(),
@@ -270,8 +281,16 @@ export default function Schedules() {
     setNewDate("");
     setNewEventTypeId("");
     setNewCustomName("");
+    setNewMinistryId("");
     setRecurrenceType("none");
     setRecurrenceEndDate("");
+  };
+
+  const canEditService = (service: Service): boolean => {
+    if (isAdmin) return true;
+    if (!isLeader) return false;
+    if (!service.ministryId) return false;
+    return leaderMinistryIds.includes(service.ministryId);
   };
 
   const handleAddAssignment = async () => {
@@ -687,12 +706,13 @@ export default function Schedules() {
                       const eventType = eventTypes?.find(e => e.id === service.eventTypeId);
                       const assignments = (service.assignments || []) as ServiceAssignment[];
                       const stats = getConfirmationStats(assignments);
+                      const canEdit = canEditService(service);
                       return (
                         <div
                           key={service.id}
-                          onClick={() => isAdminOrLeader && openAssignDialog(service)}
+                          onClick={() => canEdit && openAssignDialog(service)}
                           className={`text-xs p-1.5 rounded truncate ${
-                            isAdminOrLeader ? "cursor-pointer" : ""
+                            canEdit ? "cursor-pointer" : ""
                           } ${
                             stats.total > 0 && stats.confirmed === stats.total
                               ? "bg-green-100 text-green-800"
@@ -722,6 +742,7 @@ export default function Schedules() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredServices.map((service) => {
             const eventType = eventTypes?.find(e => e.id === service.eventTypeId);
+            const ministry = ministries?.find(m => m.id === service.ministryId);
             const assignments = (service.assignments || []) as ServiceAssignment[];
             const stats = getConfirmationStats(assignments);
             
@@ -743,14 +764,21 @@ export default function Schedules() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {format(new Date(service.date), "EEEE", { locale: ptBR })}
                         </p>
-                        {eventType && (
-                          <Badge variant="outline" className="mt-1 text-xs">
-                            {eventType.name}
-                          </Badge>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {eventType && (
+                            <Badge variant="outline" className="text-xs">
+                              {eventType.name}
+                            </Badge>
+                          )}
+                          {ministry && (
+                            <Badge variant="secondary" className="text-xs">
+                              {ministry.name}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    {isAdminOrLeader && (
+                    {canEditService(service) && (
                       <div className="flex items-center gap-1">
                         <Button 
                           size="icon" 
@@ -901,6 +929,26 @@ export default function Schedules() {
                 }}
                 data-testid="input-custom-name"
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Ministério Responsável</label>
+              <Select value={newMinistryId} onValueChange={setNewMinistryId}>
+                <SelectTrigger data-testid="select-ministry">
+                  <SelectValue placeholder="Selecione um ministério (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum (Geral)</SelectItem>
+                  {(isAdmin ? ministries : ministries?.filter(m => leaderMinistryIds.includes(m.id)))?.map((ministry) => (
+                    <SelectItem key={ministry.id} value={ministry.id}>
+                      {ministry.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Líderes do ministério poderão gerenciar esta escala
+              </p>
             </div>
 
             <div className="space-y-3 pt-2 border-t">

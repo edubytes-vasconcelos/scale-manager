@@ -66,6 +66,7 @@ export const services = pgTable("services", {
   date: text("date").notNull(), // stored as YYYY-MM-DD string
   title: text("title").notNull(),
   eventTypeId: uuid("event_type_id"),
+  ministryId: uuid("ministry_id"), // links service to a ministry for leader permissions
   assignments: jsonb("assignments").$type<ServiceAssignment[]>(),
   createdAt: timestamp("created_at"),
 });

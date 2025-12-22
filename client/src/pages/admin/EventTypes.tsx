@@ -128,8 +128,12 @@ export default function EventTypes() {
                         <div 
                           className="w-3 h-3 rounded-full" 
                           style={{ backgroundColor: eventType.color }}
+                          title={eventType.color}
+                          aria-label={`Cor: ${colorOptions.find(c => c.value === eventType.color)?.label || eventType.color}`}
                         />
-                        <span className="text-xs text-muted-foreground">{eventType.color}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {colorOptions.find(c => c.value === eventType.color)?.label || "Personalizado"}
+                        </span>
                       </div>
                     )}
                   </div>
