@@ -17,6 +17,7 @@ type AuthContextType = {
   user: User | null;
   volunteer: VolunteerProfile | null;
   loading: boolean;
+  authReady: boolean;
   signOut: () => Promise<void>;
   refreshVolunteerProfile: () => Promise<void>;
 };
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   volunteer: null,
   loading: true,
+  authReady: false,
   signOut: async () => {},
   refreshVolunteerProfile: async () => {},
 });
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [volunteer, setVolunteer] = useState<VolunteerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const { toast } = useToast();
 
@@ -74,12 +77,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadUserData = useCallback(async (currentSession: Session | null, isInitial: boolean = false) => {
+    setAuthReady(false);
+    
     if (!currentSession?.user) {
       setSession(null);
       setUser(null);
       setVolunteer(null);
       if (isInitial) setInitialLoadDone(true);
       setLoading(false);
+      setAuthReady(true);
       return;
     }
 
@@ -92,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setVolunteer(profile);
     if (isInitial) setInitialLoadDone(true);
     setLoading(false);
+    setAuthReady(true);
   }, [claimProfile, fetchVolunteerProfile]);
 
   useEffect(() => {
@@ -132,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, volunteer, loading, signOut, refreshVolunteerProfile }}>
+    <AuthContext.Provider value={{ session, user, volunteer, loading, authReady, signOut, refreshVolunteerProfile }}>
       {children}
     </AuthContext.Provider>
   );
