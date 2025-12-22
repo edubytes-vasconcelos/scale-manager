@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useVolunteerProfile, useTeams, useVolunteers, useCreateTeam, useDeleteTeam } from "@/hooks/use-data";
+import { useVolunteerProfile, useTeams, useVolunteers, useCreateTeam, useUpdateTeam, useDeleteTeam } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,23 +9,27 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { UsersRound, User, Plus, Loader2, Trash2 } from "lucide-react";
+import { UsersRound, User, Plus, Loader2, Trash2, Pencil } from "lucide-react";
+import type { Team } from "@shared/schema";
 
 export default function Teams() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: teams, isLoading } = useTeams(profile?.organizationId);
   const { data: volunteers } = useVolunteers(profile?.organizationId);
   const createTeam = useCreateTeam();
+  const updateTeam = useUpdateTeam();
   const deleteTeam = useDeleteTeam();
   const { toast } = useToast();
   
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     memberIds: [] as string[],
   });
 
-  const canSubmit = !!profile?.organizationId && !createTeam.isPending && formData.name.trim() !== "";
+  const canSubmit = !!profile?.organizationId && !createTeam.isPending && !updateTeam.isPending && formData.name.trim() !== "";
+  const isPending = createTeam.isPending || updateTeam.isPending;
 
   const getMemberNames = (memberIds: any) => {
     if (!memberIds || !Array.isArray(memberIds) || !volunteers) return [];
@@ -57,26 +61,57 @@ export default function Teams() {
     }
 
     try {
-      await createTeam.mutateAsync({
-        name: formData.name.trim(),
-        memberIds: formData.memberIds,
-        organizationId: profile.organizationId,
-      });
+      if (editingTeam) {
+        await updateTeam.mutateAsync({
+          id: editingTeam.id,
+          name: formData.name.trim(),
+          memberIds: formData.memberIds,
+        });
+        toast({
+          title: "Sucesso",
+          description: "Equipe atualizada com sucesso!",
+        });
+      } else {
+        await createTeam.mutateAsync({
+          name: formData.name.trim(),
+          memberIds: formData.memberIds,
+          organizationId: profile.organizationId,
+        });
+        toast({
+          title: "Sucesso",
+          description: "Equipe criada com sucesso!",
+        });
+      }
 
-      toast({
-        title: "Sucesso",
-        description: "Equipe criada com sucesso!",
-      });
-
-      setFormData({ name: "", memberIds: [] });
-      setDialogOpen(false);
+      closeDialog();
     } catch (error: any) {
       toast({
-        title: "Erro ao criar equipe",
+        title: editingTeam ? "Erro ao atualizar equipe" : "Erro ao criar equipe",
         description: error.message || "Tente novamente.",
         variant: "destructive",
       });
     }
+  };
+
+  const openEditDialog = (team: Team) => {
+    setEditingTeam(team);
+    setFormData({
+      name: team.name,
+      memberIds: Array.isArray(team.memberIds) ? team.memberIds : [],
+    });
+    setDialogOpen(true);
+  };
+
+  const openCreateDialog = () => {
+    setEditingTeam(null);
+    setFormData({ name: "", memberIds: [] });
+    setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingTeam(null);
+    setFormData({ name: "", memberIds: [] });
   };
 
   const handleDelete = async (teamId: string, teamName: string) => {
@@ -114,7 +149,7 @@ export default function Teams() {
             {teams?.length || 0} equipes
           </Badge>
           <Button 
-            onClick={() => setDialogOpen(true)} 
+            onClick={openCreateDialog} 
             disabled={profileLoading || !profile?.organizationId}
             data-testid="button-add-team"
           >
@@ -149,15 +184,25 @@ export default function Teams() {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => handleDelete(team.id, team.name)}
-                      data-testid={`button-delete-team-${team.id}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => openEditDialog(team)}
+                        data-testid={`button-edit-team-${team.id}`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => handleDelete(team.id, team.name)}
+                        data-testid={`button-delete-team-${team.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 {memberNames.length > 0 && (
@@ -193,10 +238,10 @@ export default function Teams() {
         </Card>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova Equipe</DialogTitle>
+            <DialogTitle>{editingTeam ? "Editar Equipe" : "Nova Equipe"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -249,17 +294,17 @@ export default function Teams() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={closeDialog}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={!canSubmit} data-testid="button-submit-team">
-                {createTeam.isPending ? (
+                {isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Criando...
+                    {editingTeam ? "Salvando..." : "Criando..."}
                   </>
                 ) : (
-                  "Criar Equipe"
+                  editingTeam ? "Salvar" : "Criar Equipe"
                 )}
               </Button>
             </DialogFooter>

@@ -154,7 +154,13 @@ export function useTeams(organizationId: string | null | undefined) {
         .order("name", { ascending: true });
 
       if (error) throw error;
-      return data as Team[];
+      
+      return data.map((t: any) => ({
+        id: t.id,
+        organizationId: t.organization_id,
+        name: t.name,
+        memberIds: t.member_ids || [],
+      })) as Team[];
     },
     enabled: !!organizationId,
   });
@@ -328,6 +334,32 @@ export function useCreateTeam() {
           member_ids: team.memberIds,
           organization_id: team.organizationId,
         })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+  });
+}
+
+export function useUpdateTeam() {
+  return useMutation({
+    mutationFn: async (team: {
+      id: string;
+      name: string;
+      memberIds: string[];
+    }) => {
+      const { data, error } = await supabase
+        .from("teams")
+        .update({
+          name: team.name,
+          member_ids: team.memberIds,
+        })
+        .eq("id", team.id)
         .select()
         .single();
 

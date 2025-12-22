@@ -206,13 +206,34 @@ export default function Schedules() {
       return;
     }
 
-    if (isLeader && !isAdmin && (!newMinistryId || newMinistryId === "none")) {
+    if (recurrenceType !== "none" && !recurrenceEndDate) {
       toast({
-        title: "Ministério obrigatório",
-        description: "Líderes devem vincular a escala a um ministério.",
+        title: "Data fim obrigatória",
+        description: "Informe a data final para a recorrência.",
         variant: "destructive",
       });
       return;
+    }
+
+    if (recurrenceType !== "none" && recurrenceEndDate) {
+      const minEnd = getMinEndDate();
+      const maxEnd = getMaxEndDate();
+      if (recurrenceEndDate < minEnd) {
+        toast({
+          title: "Data fim inválida",
+          description: `A data fim deve ser no mínimo ${format(new Date(minEnd), "dd/MM/yyyy")}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (recurrenceEndDate > maxEnd) {
+        toast({
+          title: "Data fim excede o limite",
+          description: `A data fim deve ser no máximo ${format(new Date(maxEnd), "dd/MM/yyyy")} (${recurrenceType === "daily" ? "15 dias" : "3 meses"}).`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (!profile?.organizationId) return;
@@ -244,7 +265,6 @@ export default function Schedules() {
         date,
         title,
         event_type_id: newEventTypeId || null,
-        ministry_id: newMinistryId && newMinistryId !== "none" ? newMinistryId : null,
         organization_id: profile.organizationId,
         assignments: [],
         created_at: new Date().toISOString(),

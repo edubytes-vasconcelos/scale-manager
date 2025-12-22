@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [volunteer, setVolunteer] = useState<VolunteerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const { toast } = useToast();
 
   const fetchVolunteerProfile = useCallback(async (authUserId: string): Promise<VolunteerProfile | null> => {
@@ -72,11 +73,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loadUserData = useCallback(async (currentSession: Session | null) => {
+  const loadUserData = useCallback(async (currentSession: Session | null, isInitial: boolean = false) => {
     if (!currentSession?.user) {
       setSession(null);
       setUser(null);
       setVolunteer(null);
+      if (isInitial) setInitialLoadDone(true);
       setLoading(false);
       return;
     }
@@ -88,20 +90,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const profile = await fetchVolunteerProfile(currentSession.user.id);
     setVolunteer(profile);
+    if (isInitial) setInitialLoadDone(true);
     setLoading(false);
   }, [claimProfile, fetchVolunteerProfile]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      loadUserData(session);
+      loadUserData(session, true);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadUserData(session);
+      if (initialLoadDone) {
+        loadUserData(session, false);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, [loadUserData]);
+  }, [loadUserData, initialLoadDone]);
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
