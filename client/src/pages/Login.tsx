@@ -4,14 +4,17 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowRight, ShieldCheck, UserPlus } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [_, setLocation] = useLocation();
   const { session } = useAuth();
@@ -104,6 +107,28 @@ export default function Login() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setSocialLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Erro ao entrar com Google",
+        description: error.message || "Não foi possível conectar com o Google.",
+        variant: "destructive",
+      });
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
@@ -192,6 +217,29 @@ export default function Login() {
               )}
             </Button>
           </form>
+
+          <div className="relative my-6">
+            <Separator className="my-4" />
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-slate-800 px-3 text-xs text-muted-foreground">
+              ou continue com
+            </span>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGoogleLogin}
+            disabled={socialLoading || loading}
+            className="w-full py-5"
+            data-testid="button-google-login"
+          >
+            {socialLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            ) : (
+              <SiGoogle className="w-4 h-4 mr-2" />
+            )}
+            Google
+          </Button>
           
           <div className="mt-8 text-center space-y-3">
             <button

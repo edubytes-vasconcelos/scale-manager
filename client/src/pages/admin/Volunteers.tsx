@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Shield, UserCheck, UserCog, User, Loader2, Edit2, Plus, Church, Star } from "lucide-react";
+import { Users, Mail, Shield, UserCheck, UserCog, User, Loader2, Edit2, Plus, Church, Star, Phone, Bell, BellOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import type { Volunteer, MinistryAssignment } from "@shared/schema";
@@ -29,6 +30,11 @@ export default function Volunteers() {
   const [newVolunteerName, setNewVolunteerName] = useState("");
   const [newVolunteerEmail, setNewVolunteerEmail] = useState("");
   const [newVolunteerAccessLevel, setNewVolunteerAccessLevel] = useState("volunteer");
+  const [newVolunteerWhatsapp, setNewVolunteerWhatsapp] = useState("");
+  const [newVolunteerAcceptsNotifications, setNewVolunteerAcceptsNotifications] = useState(true);
+  
+  const [editWhatsapp, setEditWhatsapp] = useState("");
+  const [editAcceptsNotifications, setEditAcceptsNotifications] = useState(true);
 
   const isAdmin = profile?.accessLevel === "admin";
 
@@ -55,6 +61,8 @@ export default function Volunteers() {
     setNewAccessLevel(volunteer.accessLevel || "volunteer");
     const assignments = (volunteer.ministryAssignments || []) as MinistryAssignment[];
     setMinistryAssignments(assignments);
+    setEditWhatsapp((volunteer as any).whatsapp || "");
+    setEditAcceptsNotifications((volunteer as any).acceptsNotifications !== "false");
     setEditDialogOpen(true);
   };
 
@@ -88,6 +96,8 @@ export default function Volunteers() {
         .update({ 
           access_level: computedAccessLevel,
           ministry_assignments: ministryAssignments,
+          whatsapp: editWhatsapp.trim() || null,
+          accepts_notifications: editAcceptsNotifications ? "true" : "false",
         })
         .eq("id", selectedVolunteer.id);
 
@@ -98,7 +108,7 @@ export default function Volunteers() {
         description: "Voluntário atualizado!",
       });
 
-      queryClient.invalidateQueries({ queryKey: ["volunteers"] });
+      queryClient.invalidateQueries({ queryKey: ["volunteers", profile?.organizationId] });
       setEditDialogOpen(false);
     } catch (error: any) {
       toast({
@@ -149,6 +159,8 @@ export default function Volunteers() {
           access_level: newVolunteerAccessLevel,
           organization_id: profile.organizationId,
           ministry_assignments: [],
+          whatsapp: newVolunteerWhatsapp.trim() || null,
+          accepts_notifications: newVolunteerAcceptsNotifications ? "true" : "false",
         });
 
       if (error) throw error;
@@ -158,11 +170,13 @@ export default function Volunteers() {
         description: "Quando a pessoa se cadastrar com este e-mail, será vinculada automaticamente.",
       });
 
-      queryClient.invalidateQueries({ queryKey: ["volunteers"] });
+      queryClient.invalidateQueries({ queryKey: ["volunteers", profile?.organizationId] });
       setAddDialogOpen(false);
       setNewVolunteerName("");
       setNewVolunteerEmail("");
       setNewVolunteerAccessLevel("volunteer");
+      setNewVolunteerWhatsapp("");
+      setNewVolunteerAcceptsNotifications(true);
     } catch (error: any) {
       toast({
         title: "Erro ao adicionar",
@@ -359,6 +373,37 @@ export default function Volunteers() {
                 </p>
               </div>
             )}
+
+            <div className="space-y-3 pt-2 border-t">
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                  WhatsApp
+                </label>
+                <Input
+                  type="tel"
+                  placeholder="(00) 00000-0000"
+                  value={editWhatsapp}
+                  onChange={(e) => setEditWhatsapp(e.target.value)}
+                  data-testid="input-edit-whatsapp"
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <div className="flex items-center gap-2">
+                  {editAcceptsNotifications ? (
+                    <Bell className="w-4 h-4 text-green-600" />
+                  ) : (
+                    <BellOff className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  <label className="text-sm font-medium">Aceita notificações</label>
+                </div>
+                <Switch
+                  checked={editAcceptsNotifications}
+                  onCheckedChange={setEditAcceptsNotifications}
+                  data-testid="switch-edit-notifications"
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
@@ -424,6 +469,34 @@ export default function Volunteers() {
               <p className="text-xs text-muted-foreground">
                 Você pode configurar ministérios e liderança após o cadastro.
               </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Phone className="w-4 h-4 text-muted-foreground" />
+                WhatsApp (opcional)
+              </label>
+              <Input
+                type="tel"
+                placeholder="(00) 00000-0000"
+                value={newVolunteerWhatsapp}
+                onChange={(e) => setNewVolunteerWhatsapp(e.target.value)}
+                data-testid="input-new-volunteer-whatsapp"
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+              <div className="flex items-center gap-2">
+                {newVolunteerAcceptsNotifications ? (
+                  <Bell className="w-4 h-4 text-green-600" />
+                ) : (
+                  <BellOff className="w-4 h-4 text-muted-foreground" />
+                )}
+                <label className="text-sm font-medium">Aceita notificações</label>
+              </div>
+              <Switch
+                checked={newVolunteerAcceptsNotifications}
+                onCheckedChange={setNewVolunteerAcceptsNotifications}
+                data-testid="switch-new-volunteer-notifications"
+              />
             </div>
           </div>
           <DialogFooter>

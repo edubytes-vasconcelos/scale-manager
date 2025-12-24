@@ -10,6 +10,8 @@ export const volunteers = pgTable("volunteers", {
   accessLevel: text("access_level"), // admin | leader | volunteer
   name: text("name").notNull(),
   email: text("email"),
+  whatsapp: text("whatsapp"),
+  acceptsNotifications: text("accepts_notifications").default("true"), // "true" | "false" stored as text
   ministryAssignments: jsonb("ministry_assignments"),
   createdAt: timestamp("created_at"),
 });

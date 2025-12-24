@@ -36,7 +36,8 @@ export function useVolunteerProfile() {
         accessLevel: data.access_level,
         name: data.name,
         email: data.email,
-        phone: data.phone,
+        whatsapp: data.whatsapp,
+        acceptsNotifications: data.accepts_notifications,
         ministryAssignments: data.ministry_assignments,
         createdAt: data.created_at,
         organization: data.organization,
@@ -114,6 +115,8 @@ export function useVolunteers(organizationId: string | null | undefined) {
         accessLevel: v.access_level,
         name: v.name,
         email: v.email,
+        whatsapp: v.whatsapp,
+        acceptsNotifications: v.accepts_notifications,
         ministryAssignments: v.ministry_assignments,
         createdAt: v.created_at,
       })) as Volunteer[];
