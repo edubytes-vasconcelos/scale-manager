@@ -1,30 +1,54 @@
 import { Service } from "@shared/schema";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar, Clock, CheckCircle2 } from "lucide-react";
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { Calendar, Clock, CheckCircle2, Clock4, X, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface ServiceCardProps {
   service: Service;
+  volunteerId?: string | null;
 }
 
-export function ServiceCard({ service }: ServiceCardProps) {
-  const [rsvpState, setRsvpState] = useState<"idle" | "confirmed">("idle");
-  const { toast } = useToast();
+export function ServiceCard({ service, volunteerId }: ServiceCardProps) {
   
   const date = new Date(service.date);
   const formattedDate = format(date, "EEEE, d 'de' MMMM", { locale: ptBR });
   const formattedTime = format(date, "HH:mm", { locale: ptBR });
+  
+  const assignments = (service.assignments || []) as any[];
+  const myAssignment = volunteerId 
+    ? assignments.find((a: any) => a.volunteerId === volunteerId) 
+    : null;
+  const totalVolunteers = assignments.length;
 
-  const handleRSVP = () => {
-    // In a real app, this would be a Supabase mutation
-    setRsvpState("confirmed");
-    toast({
-      title: "Presença confirmada!",
-      description: `Você confirmou presença para ${service.title}.`,
-      className: "bg-green-50 border-green-200 text-green-900",
-    });
+  const getStatusBadge = () => {
+    if (!myAssignment) return null;
+    
+    switch (myAssignment.status) {
+      case 'confirmed':
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800 border-green-300">
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+            Confirmado
+          </Badge>
+        );
+      case 'pending':
+        return (
+          <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
+            <Clock4 className="w-3.5 h-3.5 mr-1" />
+            Pendente
+          </Badge>
+        );
+      case 'declined':
+        return (
+          <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-300">
+            <X className="w-3.5 h-3.5 mr-1" />
+            Recusado
+          </Badge>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -47,26 +71,17 @@ export function ServiceCard({ service }: ServiceCardProps) {
           </div>
         </div>
         
-        <div className="pt-4 border-t border-border/50 flex justify-end">
-          <button
-            onClick={handleRSVP}
-            disabled={rsvpState === "confirmed"}
-            className={`
-              flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300
-              ${rsvpState === "confirmed" 
-                ? "bg-green-100 text-green-700 cursor-default" 
-                : "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 active:scale-95"}
-            `}
-          >
-            {rsvpState === "confirmed" ? (
-              <>
-                <CheckCircle2 className="w-4 h-4" />
-                Confirmado
-              </>
-            ) : (
-              "Confirmar Presença"
-            )}
-          </button>
+        <div className="pt-4 border-t border-border/50 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Users className="w-4 h-4" />
+            <span>{totalVolunteers} voluntário{totalVolunteers !== 1 ? 's' : ''}</span>
+          </div>
+          
+          {myAssignment ? (
+            getStatusBadge()
+          ) : (
+            <span className="text-sm text-muted-foreground">Você não está escalado</span>
+          )}
         </div>
       </div>
       

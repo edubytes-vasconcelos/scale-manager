@@ -365,7 +365,7 @@ export default function Dashboard() {
           ) : services && services.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {services.map((service) => (
-                <ServiceCard key={service.id} service={service} />
+                <ServiceCard key={service.id} service={service} volunteerId={volunteer?.id} />
               ))}
             </div>
           ) : (
