@@ -313,6 +313,48 @@ export default function Schedules() {
     return leaderMinistryIds.includes(service.ministryId);
   };
 
+  const checkVolunteerConflicts = async (
+    volunteerIds: string[], 
+    date: string, 
+    eventTypeId: string | null, 
+    excludeServiceId: string
+  ): Promise<{ conflictingIds: string[]; conflictingNames: string[] }> => {
+    if (!eventTypeId || !profile?.organizationId) {
+      return { conflictingIds: [], conflictingNames: [] };
+    }
+
+    const { data: conflictingServices, error } = await supabase
+      .from("services")
+      .select("id, assignments")
+      .eq("organization_id", profile.organizationId)
+      .eq("date", date)
+      .eq("event_type_id", eventTypeId)
+      .neq("id", excludeServiceId);
+
+    if (error || !conflictingServices) {
+      return { conflictingIds: [], conflictingNames: [] };
+    }
+
+    const conflictingIds: string[] = [];
+    for (const service of conflictingServices) {
+      const assignments = (service.assignments || []) as ServiceAssignment[];
+      for (const assignment of assignments) {
+        // Teams are expanded to individual volunteer assignments when saved
+        // so we only need to check volunteerId
+        const volId = assignment.volunteerId;
+        if (volId && volunteerIds.includes(volId) && !conflictingIds.includes(volId)) {
+          conflictingIds.push(volId);
+        }
+      }
+    }
+
+    const conflictingNames = conflictingIds.map(id => {
+      const volunteer = volunteers?.find(v => v.id === id);
+      return volunteer?.name || "Desconhecido";
+    });
+    return { conflictingIds, conflictingNames };
+  };
+
   const handleAddAssignment = async () => {
     if (!isAdminOrLeader) return;
     if (!selectedService) return;
@@ -361,6 +403,24 @@ export default function Schedules() {
           setIsSaving(false);
           return;
         }
+        
+        const { conflictingNames } = await checkVolunteerConflicts(
+          [selectedVolunteerId],
+          selectedService.date,
+          selectedService.eventTypeId,
+          selectedService.id
+        );
+        
+        if (conflictingNames.length > 0) {
+          toast({
+            title: "Conflito de escala",
+            description: `${conflictingNames[0]} já está escalado para este tipo de evento nesta data.`,
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+        
         newAssignments = [{
           volunteerId: selectedVolunteerId,
           status: "pending",
@@ -398,16 +458,11 @@ export default function Schedules() {
           });
         }
         
-        for (const memberId of memberIds) {
-          if (!currentAssignments.some(a => a.volunteerId === memberId)) {
-            newAssignments.push({
-              volunteerId: memberId,
-              status: "pending",
-            });
-          }
-        }
-
-        if (newAssignments.length === 0) {
+        const candidateIds = memberIds.filter(
+          memberId => !currentAssignments.some(a => a.volunteerId === memberId)
+        );
+        
+        if (candidateIds.length === 0) {
           toast({
             title: "Todos já escalados",
             description: "Todos os membros da equipe já estão nesta escala.",
@@ -415,6 +470,39 @@ export default function Schedules() {
           });
           setIsSaving(false);
           return;
+        }
+        
+        const { conflictingIds, conflictingNames } = await checkVolunteerConflicts(
+          candidateIds,
+          selectedService.date,
+          selectedService.eventTypeId,
+          selectedService.id
+        );
+        
+        const nonConflictingIds = candidateIds.filter(id => !conflictingIds.includes(id));
+        
+        for (const memberId of nonConflictingIds) {
+          newAssignments.push({
+            volunteerId: memberId,
+            status: "pending",
+          });
+        }
+
+        if (newAssignments.length === 0) {
+          toast({
+            title: "Conflito de escala",
+            description: `Todos os membros já estão escalados para este tipo de evento nesta data: ${conflictingNames.join(", ")}.`,
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+        
+        if (conflictingNames.length > 0) {
+          toast({
+            title: "Alguns membros excluídos",
+            description: `${conflictingNames.join(", ")} já ${conflictingNames.length === 1 ? 'está' : 'estão'} escalado(s) para este tipo de evento nesta data.`,
+          });
         }
       }
 
