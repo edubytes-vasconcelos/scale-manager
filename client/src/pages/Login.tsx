@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
@@ -256,9 +256,11 @@ export default function Login() {
             </button>
             
             {!isSignUp && (
-              <p className="text-xs text-muted-foreground">
-                Esqueceu sua senha? Entre em contato com a secretaria.
-              </p>
+              <Link href="/forgot-password">
+                <span className="text-sm text-muted-foreground hover:text-primary cursor-pointer block" data-testid="link-forgot-password">
+                  Esqueci minha senha
+                </span>
+              </Link>
             )}
           </div>
         </div>

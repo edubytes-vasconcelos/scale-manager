@@ -12,8 +12,7 @@ import {
   X,
   ClipboardList,
   ChevronRight,
-  Home,
-  MessageCircle
+  Home
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -25,7 +24,6 @@ const navItems = [
   { path: "/admin/ministries", label: "Ministérios", icon: Church, adminOnly: true, breadcrumb: ["Admin", "Ministérios"] },
   { path: "/admin/event-types", label: "Tipos de Evento", icon: Calendar, adminOnly: true, breadcrumb: ["Admin", "Tipos de Evento"] },
   { path: "/admin/teams", label: "Equipes", icon: UsersRound, adminOnly: true, breadcrumb: ["Admin", "Equipes"] },
-  { path: "/admin/chat", label: "Mensagens", icon: MessageCircle, adminOnly: true, breadcrumb: ["Admin", "Mensagens"] },
 ];
 
 function Breadcrumbs({ location }: { location: string }) {

@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useVolunteerProfile, useServices, useMySchedules, useUpdateAssignmentStatus } from "@/hooks/use-data";
 import { ServiceCard } from "@/components/ServiceCard";
-import { ChatWidget } from "@/components/ChatWidget";
 import { CalendarDays, User, Building2, ClipboardCheck, Check, X, Loader2, Clock, AlertCircle, Calendar, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -424,13 +423,6 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Chat Widget */}
-      {volunteer?.id && volunteer?.organizationId && (
-        <ChatWidget
-          volunteerId={volunteer.id}
-          organizationId={volunteer.organizationId}
-        />
-      )}
     </AppLayout>
   );
 }
