@@ -16,6 +16,8 @@ import EventTypes from "@/pages/admin/EventTypes";
 import Teams from "@/pages/admin/Teams";
 import Schedules from "@/pages/admin/Schedules";
 import AppLayout from "@/components/AppLayout";
+import ResetPassword from "@/pages/ResetPassword";
+
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { session, volunteer, loading, authReady } = useAuth();
