@@ -5,6 +5,19 @@ import { Input } from "@/components/ui/input";
 
 type Status = "loading" | "ready" | "error" | "success";
 
+function detectLikelyEmailScanner() {
+  const hash = window.location.hash;
+  if (!hash.includes("error_code=otp_expired")) return false;
+
+  const requestedAt = sessionStorage.getItem("recovery_requested_at");
+  if (!requestedAt) return false;
+
+  const elapsed = Date.now() - Number(requestedAt);
+
+  // Menos de 2 minutos → scanner ou preview
+  return elapsed < 2 * 60 * 1000;
+}
+
 export default function ResetPassword() {
   const [status, setStatus] = useState<Status>("loading");
   const [password, setPassword] = useState("");
@@ -12,20 +25,23 @@ export default function ResetPassword() {
 
   useEffect(() => {
     async function init() {
-      // 1️⃣ Tratar erro vindo do hash
       const hash = window.location.hash;
-      if (hash.includes("error=")) {
-        const params = new URLSearchParams(hash.replace("#", ""));
-        const description =
-          params.get("error_description") ||
-          "Link inválido ou expirado. Solicite um novo link.";
 
-        setMessage(description.replace(/\+/g, " "));
+      // ❌ Erro vindo do Supabase
+      if (hash.includes("error=")) {
+        const isScanner = detectLikelyEmailScanner();
+
+        setMessage(
+          isScanner
+            ? "Detectamos que seu email pode ter sido verificado automaticamente por um sistema de segurança. Isso invalida o link. Gere um novo e clique apenas uma vez."
+            : "Link inválido ou expirado. Solicite um novo link."
+        );
+
         setStatus("error");
         return;
       }
 
-      // 2️⃣ Consumir token de recovery corretamente
+      // 🔁 Trocar code por sessão
       const { error } = await supabase.auth.exchangeCodeForSession(
         window.location.href
       );
@@ -60,7 +76,6 @@ export default function ResetPassword() {
     setStatus("success");
   }
 
-  // 🔄 LOADING
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -69,22 +84,20 @@ export default function ResetPassword() {
     );
   }
 
-  // ❌ ERRO
   if (status === "error") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="bg-background p-8 rounded-xl shadow text-center max-w-sm">
-          <h2 className="text-xl font-semibold mb-2">Link inválido</h2>
+          <h2 className="text-xl font-semibold mb-2">Não foi possível redefinir</h2>
           <p className="text-muted-foreground mb-4">{message}</p>
-          <a href="/forgot-password" className="text-primary hover:underline">
-            Solicitar novo link
-          </a>
+          <Button onClick={() => (window.location.href = "/forgot-password")}>
+            Gerar novo link
+          </Button>
         </div>
       </div>
     );
   }
 
-  // ✅ SUCESSO
   if (status === "success") {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -101,7 +114,6 @@ export default function ResetPassword() {
     );
   }
 
-  // 🔐 FORMULÁRIO
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="bg-background p-8 rounded-xl shadow max-w-sm w-full">
