@@ -1,7 +1,7 @@
 import { Service } from "@shared/schema";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar, Clock, CheckCircle2, Clock4, X, Users } from "lucide-react";
+import { Calendar, CheckCircle2, Clock4, X, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface ServiceCardProps {
@@ -13,7 +13,6 @@ export function ServiceCard({ service, volunteerId }: ServiceCardProps) {
   
   const date = new Date(service.date);
   const formattedDate = format(date, "EEEE, d 'de' MMMM", { locale: ptBR });
-  const formattedTime = format(date, "HH:mm", { locale: ptBR });
   
   const assignments = (service.assignments || []) as any[];
   const myAssignment = volunteerId 
@@ -54,21 +53,14 @@ export function ServiceCard({ service, volunteerId }: ServiceCardProps) {
   return (
     <div className="group relative overflow-hidden bg-card rounded-2xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300">
       <div className="p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-2 text-primary font-medium text-sm mb-1 uppercase tracking-wider">
-              <Calendar className="w-4 h-4" />
-              {formattedDate}
-            </div>
-            <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
-              {service.title}
-            </h3>
+        <div className="flex flex-col gap-2 mb-4">
+          <div className="flex items-center gap-2 text-primary font-medium text-sm uppercase tracking-wider">
+            <Calendar className="w-4 h-4" />
+            {formattedDate}
           </div>
-          
-          <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-lg w-fit">
-            <Clock className="w-4 h-4" />
-            <span className="text-sm font-medium">{formattedTime}</span>
-          </div>
+          <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
+            {service.title}
+          </h3>
         </div>
         
         <div className="pt-4 border-t border-border/50 flex items-center justify-between gap-2">
