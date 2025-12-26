@@ -91,3 +91,29 @@ export type EventType = typeof eventTypes.$inferSelect;
 export type VolunteerWithOrg = Volunteer & {
   organization?: { name: string } | null;
 };
+
+// Chat messages table for real-time communication
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull(),
+  senderId: uuid("sender_id").notNull(), // volunteer id
+  receiverId: uuid("receiver_id"), // null = message to all admins, or specific volunteer id
+  content: text("content").notNull(),
+  isFromAdmin: text("is_from_admin").default("false"), // "true" | "false"
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at"),
+});
+
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
+  id: true,
+  createdAt: true,
+  readAt: true,
+});
+
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+
+// Extended type with sender info
+export type ChatMessageWithSender = ChatMessage & {
+  sender?: { name: string } | null;
+};
