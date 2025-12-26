@@ -193,11 +193,13 @@ export function useUpdateAssignmentStatus() {
     mutationFn: async ({ 
       serviceId, 
       volunteerId, 
+      organizationId,
       status,
       note
     }: { 
       serviceId: string; 
       volunteerId: string; 
+      organizationId: string;
       status: "confirmed" | "declined" | "pending";
       note?: string;
     }) => {
@@ -230,11 +232,12 @@ export function useUpdateAssignmentStatus() {
 
       if (updateError) throw updateError;
       
-      return { serviceId, updatedAssignments };
+      return { serviceId, volunteerId, organizationId, updatedAssignments };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["services"], refetchType: "all" });
-      queryClient.invalidateQueries({ queryKey: ["my-schedules"], refetchType: "all" });
+    onSuccess: (data) => {
+      // Invalidate with exact keys to ensure proper cache refresh
+      queryClient.invalidateQueries({ queryKey: ["services", data.organizationId] });
+      queryClient.invalidateQueries({ queryKey: ["my-schedules", data.volunteerId, data.organizationId] });
     },
   });
 }
