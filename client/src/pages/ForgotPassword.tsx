@@ -20,13 +20,21 @@ export default function ForgotPassword() {
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         {
-          redirectTo: `${window.location.origin}/reset-password`,
+          // 🔐 URL fixa (evita edge case de proxy / porta / origin)
+          redirectTo: "https://voluntario.seventech.cloud/reset-password",
         }
       );
 
       if (error) throw error;
 
+      // 🧠 Marca o momento do pedido (usado para detectar scanner depois)
+      sessionStorage.setItem(
+        "recovery_requested_at",
+        Date.now().toString()
+      );
+
       setSent(true);
+
       toast({
         title: "Email enviado!",
         description: "Verifique sua caixa de entrada para redefinir a senha.",
@@ -34,7 +42,8 @@ export default function ForgotPassword() {
     } catch (error: any) {
       toast({
         title: "Erro ao enviar email",
-        description: error.message || "Não foi possível enviar o email de recuperação.",
+        description:
+          error.message || "Não foi possível enviar o email de recuperação.",
         variant: "destructive",
       });
     } finally {
@@ -60,11 +69,13 @@ export default function ForgotPassword() {
                 Email Enviado!
               </h1>
               <p className="text-muted-foreground mb-6">
-                Enviamos um link de recuperação para <strong className="text-foreground">{email}</strong>. 
+                Enviamos um link de recuperação para{" "}
+                <strong className="text-foreground">{email}</strong>.
+                <br />
                 Verifique sua caixa de entrada e clique no link para redefinir sua senha.
               </p>
               <p className="text-sm text-muted-foreground mb-6">
-                Não recebeu o email? Verifique a pasta de spam ou tente novamente.
+                Se usar email corporativo, evite abrir em pré-visualização.
               </p>
               <div className="space-y-3">
                 <Button
@@ -76,7 +87,11 @@ export default function ForgotPassword() {
                   Enviar novamente
                 </Button>
                 <Link href="/login">
-                  <Button variant="ghost" className="w-full" data-testid="button-back-to-login">
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    data-testid="button-back-to-login"
+                  >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Voltar ao login
                   </Button>
@@ -131,7 +146,7 @@ export default function ForgotPassword() {
 
               <div className="mt-6 text-center">
                 <Link href="/login">
-                  <span className="text-sm text-primary font-medium hover:underline cursor-pointer inline-flex items-center gap-1" data-testid="link-back-to-login">
+                  <span className="text-sm text-primary font-medium hover:underline cursor-pointer inline-flex items-center gap-1">
                     <ArrowLeft className="w-4 h-4" />
                     Voltar ao login
                   </span>
