@@ -12,9 +12,8 @@ export default function ResetPassword() {
 
   useEffect(() => {
     async function init() {
-      // 🔴 1. TRATAR ERRO DIRETO DO HASH (ANTES DE QUALQUER COISA)
+      // 1️⃣ Tratar erro vindo do hash
       const hash = window.location.hash;
-
       if (hash.includes("error=")) {
         const params = new URLSearchParams(hash.replace("#", ""));
         const description =
@@ -26,12 +25,12 @@ export default function ResetPassword() {
         return;
       }
 
-      // 🔵 2. CONSUMIR TOKEN DO SUPABASE
-      const { data, error } = await supabase.auth.getSessionFromUrl({
-        storeSession: true,
-      });
+      // 2️⃣ Consumir token de recovery corretamente
+      const { error } = await supabase.auth.exchangeCodeForSession(
+        window.location.href
+      );
 
-      if (error || !data?.session) {
+      if (error) {
         setMessage("Link inválido ou expirado. Solicite um novo link.");
         setStatus("error");
         return;
@@ -44,9 +43,13 @@ export default function ResetPassword() {
   }, []);
 
   async function handleReset() {
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
+    if (password.length < 6) {
+      setMessage("A senha deve ter no mínimo 6 caracteres.");
+      setStatus("error");
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
       setMessage("Erro ao redefinir a senha.");
@@ -73,10 +76,7 @@ export default function ResetPassword() {
         <div className="bg-background p-8 rounded-xl shadow text-center max-w-sm">
           <h2 className="text-xl font-semibold mb-2">Link inválido</h2>
           <p className="text-muted-foreground mb-4">{message}</p>
-          <a
-            href="/forgot-password"
-            className="text-primary hover:underline"
-          >
+          <a href="/forgot-password" className="text-primary hover:underline">
             Solicitar novo link
           </a>
         </div>
@@ -104,4 +104,23 @@ export default function ResetPassword() {
   // 🔐 FORMULÁRIO
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div class
+      <div className="bg-background p-8 rounded-xl shadow max-w-sm w-full">
+        <h2 className="text-xl font-semibold mb-4 text-center">
+          Redefinir senha
+        </h2>
+
+        <Input
+          type="password"
+          placeholder="Nova senha"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="mb-4"
+        />
+
+        <Button className="w-full" onClick={handleReset}>
+          Salvar nova senha
+        </Button>
+      </div>
+    </div>
+  );
+}
