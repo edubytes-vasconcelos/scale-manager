@@ -78,6 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
+            <img src="/brand/logo-192.png" alt="Logo – Gestor IASD" className="h-7 w-7" draggable={false} />
             <span className="font-display font-bold text-lg">Gestor IASD</span>
           </div>
           <Button
@@ -138,7 +139,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <LayoutDashboard className="w-5 h-5" />
               </div>
               <div>
-                <span className="font-display font-bold text-lg block">Gestor IASD</span>
+                <div className="flex items-center gap-2 mb-1">
+              <img src="/brand/logo-192.png" alt="Logo – Gestor IASD" className="h-7 w-7" draggable={false} />
+              <span className="font-display font-bold text-lg block">Gestor IASD</span>
+            </div>
                 <span className="text-xs text-muted-foreground">{profile?.organization?.name || "Igreja"}</span>
               </div>
             </div>
