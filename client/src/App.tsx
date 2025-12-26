@@ -13,6 +13,7 @@ import Ministries from "@/pages/admin/Ministries";
 import EventTypes from "@/pages/admin/EventTypes";
 import Teams from "@/pages/admin/Teams";
 import Schedules from "@/pages/admin/Schedules";
+import AdminChat from "@/pages/admin/Chat";
 import AppLayout from "@/components/AppLayout";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -71,6 +72,9 @@ function Router() {
       </Route>
       <Route path="/admin/teams">
         <ProtectedRoute component={() => <AdminPageWrapper Component={Teams} />} />
+      </Route>
+      <Route path="/admin/chat">
+        <ProtectedRoute component={AdminChat} />
       </Route>
       <Route component={NotFound} />
     </Switch>
