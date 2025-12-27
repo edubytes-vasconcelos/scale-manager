@@ -14,8 +14,6 @@ function detectLikelyEmailScanner() {
   if (!requestedAt) return false;
 
   const elapsed = Date.now() - Number(requestedAt);
-
-  // Menos de 2 minutos → scanner ou preview
   return elapsed < 2 * 60 * 1000;
 }
 
@@ -29,21 +27,17 @@ export default function ResetPassword() {
     async function init() {
       const hash = window.location.hash;
 
-      // ❌ Erro vindo do Supabase
       if (hash.includes("error=") || hash.includes("error_code=")) {
         const isScanner = detectLikelyEmailScanner();
-
         setMessage(
           isScanner
             ? "Detectamos que seu email pode ter sido verificado automaticamente por um sistema de segurança. Isso invalida o link. Gere um novo e clique apenas uma vez."
             : "Link inválido ou expirado. Solicite um novo link."
         );
-
         setStatus("error");
         return;
       }
 
-      // ✅ Verificar se o usuário está autenticado via PASSWORD_RECOVERY
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
@@ -52,13 +46,10 @@ export default function ResetPassword() {
         return;
       }
 
-      // ✅ Verificar se é sessão de recovery
-      // O Supabase cria uma sessão temporária quando o usuário clica no link
       setStatus("ready");
     }
 
-    // Listener para o evento de auth state change
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setStatus("ready");
       }
