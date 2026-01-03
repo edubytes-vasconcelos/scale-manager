@@ -1,517 +1,515 @@
-import { useState, useMemo } from "react";
-import { useVolunteerProfile, useVolunteers, useMinistries } from "@/hooks/use-data";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import {
+  useVolunteerProfile,
+  useVolunteers,
+  useMinistries,
+} from "@/hooks/use-data";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Mail, Shield, UserCheck, UserCog, User, Loader2, Edit2, Plus, Church, Star, Phone, Bell, BellOff } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import {
+  Users,
+  UserCheck,
+  Plus,
+  Star,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  Pencil,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import type { Volunteer, MinistryAssignment } from "@shared/schema";
 
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
+}
+
+function maskWhatsapp(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7)
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function renderMinistryIcon(icon: unknown) {
+  if (!icon || typeof icon === "string") return null;
+  return icon;
+}
+
+/* =========================================================
+   Volunteers Page
+========================================================= */
+
+type FormMode = "add" | "edit";
+
 export default function Volunteers() {
-  const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
-  const { data: volunteers, isLoading } = useVolunteers(profile?.organizationId);
-  const { data: ministries } = useMinistries(profile?.organizationId);
+  const { data: profile } = useVolunteerProfile();
+  const organizationId = profile?.organizationId;
+
+  const { data: volunteers, isLoading } = useVolunteers(organizationId);
+  const { data: ministries } = useMinistries(organizationId);
   const { toast } = useToast();
-  
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [selectedVolunteer, setSelectedVolunteer] = useState<Volunteer | null>(null);
-  const [newAccessLevel, setNewAccessLevel] = useState("volunteer");
-  const [ministryAssignments, setMinistryAssignments] = useState<MinistryAssignment[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  
-  const [newVolunteerName, setNewVolunteerName] = useState("");
-  const [newVolunteerEmail, setNewVolunteerEmail] = useState("");
-  const [newVolunteerAccessLevel, setNewVolunteerAccessLevel] = useState("volunteer");
-  const [newVolunteerWhatsapp, setNewVolunteerWhatsapp] = useState("");
-  const [newVolunteerAcceptsNotifications, setNewVolunteerAcceptsNotifications] = useState(true);
-  
-  const [editWhatsapp, setEditWhatsapp] = useState("");
-  const [editAcceptsNotifications, setEditAcceptsNotifications] = useState(true);
 
   const isAdmin = profile?.accessLevel === "admin";
 
-  const getAccessLevelBadge = (level: string | null, volunteerMinistryAssignments?: MinistryAssignment[]) => {
-    if (level === "admin") {
-      return <Badge className="bg-purple-500/10 text-purple-700 border-purple-200"><Shield className="w-3 h-3 mr-1" />Admin</Badge>;
-    }
-    
-    const isLeaderInAny = volunteerMinistryAssignments?.some(a => a.isLeader);
-    if (level === "leader" || isLeaderInAny) {
-      return <Badge className="bg-blue-500/10 text-blue-700 border-blue-200"><UserCog className="w-3 h-3 mr-1" />Líder</Badge>;
-    }
-    
-    return <Badge variant="secondary"><UserCheck className="w-3 h-3 mr-1" />Voluntário</Badge>;
-  };
+  const leaderMinistryIds =
+    profile?.ministryAssignments
+      ?.filter((m) => m.isLeader)
+      .map((m) => m.ministryId) || [];
 
-  const getMinistryName = (ministryId: string) => {
-    const ministry = ministries?.find(m => m.id === ministryId);
-    return ministry?.name || "Desconhecido";
-  };
+  const isLeader = leaderMinistryIds.length > 0;
 
-  const handleEditClick = (volunteer: Volunteer) => {
-    setSelectedVolunteer(volunteer);
-    setNewAccessLevel(volunteer.accessLevel || "volunteer");
-    const assignments = (volunteer.ministryAssignments || []) as MinistryAssignment[];
-    setMinistryAssignments(assignments);
-    setEditWhatsapp((volunteer as any).whatsapp || "");
-    setEditAcceptsNotifications((volunteer as any).acceptsNotifications !== "false");
-    setEditDialogOpen(true);
-  };
+  const availableMinistries = isAdmin
+    ? ministries
+    : ministries?.filter((m) => leaderMinistryIds.includes(m.id));
 
-  const handleToggleMinistry = (ministryId: string) => {
-    const existing = ministryAssignments.find(a => a.ministryId === ministryId);
-    if (existing) {
-      setMinistryAssignments(ministryAssignments.filter(a => a.ministryId !== ministryId));
-    } else {
-      setMinistryAssignments([...ministryAssignments, { ministryId, isLeader: false }]);
-    }
-  };
+  const visibleVolunteers = (isAdmin
+    ? volunteers
+    : volunteers?.filter((v) =>
+        v.ministryAssignments?.some((a) =>
+          leaderMinistryIds.includes(a.ministryId)
+        )
+      )
+  )?.slice();
 
-  const handleToggleLeader = (ministryId: string) => {
-    setMinistryAssignments(ministryAssignments.map(a => 
-      a.ministryId === ministryId ? { ...a, isLeader: !a.isLeader } : a
-    ));
-  };
+  /* =========================
+     FORM STATE
+  ========================= */
 
-  const handleSaveVolunteer = async () => {
-    if (!selectedVolunteer) return;
-    
-    const isLeaderInAny = ministryAssignments.some(a => a.isLeader);
-    const computedAccessLevel = newAccessLevel === "admin" 
-      ? "admin" 
-      : isLeaderInAny ? "leader" : "volunteer";
-    
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from("volunteers")
-        .update({ 
-          access_level: computedAccessLevel,
-          ministry_assignments: ministryAssignments,
-          whatsapp: editWhatsapp.trim() || null,
-          accepts_notifications: editAcceptsNotifications ? "true" : "false",
-        })
-        .eq("id", selectedVolunteer.id);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>("add");
+  const [currentVolunteer, setCurrentVolunteer] =
+    useState<Volunteer | null>(null);
 
-      if (error) throw error;
+  const [formName, setFormName] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formWhatsapp, setFormWhatsapp] = useState("");
+  const [formAssignments, setFormAssignments] =
+    useState<MinistryAssignment[]>([]);
+  const [saving, setSaving] = useState(false);
 
-      toast({
-        title: "Sucesso",
-        description: "Voluntário atualizado!",
-      });
+  /* =========================
+     DELETE STATE
+  ========================= */
 
-      queryClient.invalidateQueries({ queryKey: ["volunteers", profile?.organizationId] });
-      setEditDialogOpen(false);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao atualizar",
-        description: error.message || "Tente novamente.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [volunteerToDelete, setVolunteerToDelete] =
+    useState<Volunteer | null>(null);
 
-  const handleAddVolunteer = async () => {
-    const normalizedEmail = newVolunteerEmail.trim().toLowerCase();
-    
-    if (!normalizedEmail) {
-      toast({
-        title: "E-mail obrigatório",
-        description: "Informe o e-mail do voluntário.",
-        variant: "destructive",
-      });
-      return;
-    }
+  function canDeleteVolunteer(v: Volunteer) {
+    if (v.accessLevel === "admin") return false;
+    if (isAdmin) return true;
+    if (!isLeader) return false;
 
-    if (!profile?.organizationId) return;
-
-    const existingVolunteer = volunteers?.find(
-      v => v.email?.toLowerCase() === normalizedEmail
+    return v.ministryAssignments?.some(
+      (a) => !a.isLeader && leaderMinistryIds.includes(a.ministryId)
     );
-    
-    if (existingVolunteer) {
+  }
+
+  /* =========================
+     OPEN FORMS
+  ========================= */
+
+  const openAddForm = () => {
+    setFormMode("add");
+    setCurrentVolunteer(null);
+    setFormName("");
+    setFormEmail("");
+    setFormWhatsapp("");
+    setFormAssignments(
+      !isAdmin && isLeader && leaderMinistryIds.length === 1
+        ? [{ ministryId: leaderMinistryIds[0], isLeader: false }]
+        : []
+    );
+    setFormOpen(true);
+  };
+
+  const openEditForm = (v: Volunteer) => {
+    setFormMode("edit");
+    setCurrentVolunteer(v);
+    setFormName(v.name);
+    setFormEmail(v.email);
+    setFormWhatsapp(v.whatsapp || "");
+    setFormAssignments(v.ministryAssignments || []);
+    setFormOpen(true);
+  };
+
+  /* =========================
+     SUBMIT
+  ========================= */
+
+  const handleSubmit = async () => {
+    if (!organizationId) return;
+
+    if (!formName || !formEmail) {
       toast({
-        title: "E-mail já cadastrado",
-        description: "Este e-mail já está cadastrado na sua organização.",
+        title: "Campos obrigatórios",
+        description: "Nome e e-mail são obrigatórios.",
         variant: "destructive",
       });
       return;
     }
 
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from("volunteers")
-        .insert({
-          id: crypto.randomUUID(),
-          name: newVolunteerName.trim() || normalizedEmail.split("@")[0],
-          email: normalizedEmail,
-          access_level: newVolunteerAccessLevel,
-          organization_id: profile.organizationId,
-          ministry_assignments: [],
-          whatsapp: newVolunteerWhatsapp.trim() || null,
-          accepts_notifications: newVolunteerAcceptsNotifications ? "true" : "false",
-        });
-
-      if (error) throw error;
-
+    if (formAssignments.length === 0) {
       toast({
-        title: "Voluntário adicionado",
-        description: "Quando a pessoa se cadastrar com este e-mail, será vinculada automaticamente.",
+        title: "Ministério obrigatório",
+        description: "Selecione ao menos um ministério.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const safeAssignments = isAdmin
+      ? formAssignments
+      : formAssignments.map((a) => ({ ...a, isLeader: false }));
+
+    setSaving(true);
+    try {
+      if (formMode === "add") {
+        await supabase.from("volunteers").insert({
+          id: crypto.randomUUID(),
+          name: formName,
+          email: formEmail.toLowerCase(),
+          whatsapp: formWhatsapp || null,
+          organization_id: organizationId,
+          access_level: "volunteer",
+          ministry_assignments: safeAssignments,
+        });
+      } else if (currentVolunteer) {
+        await supabase
+          .from("volunteers")
+          .update({
+            name: formName,
+            whatsapp: formWhatsapp || null,
+            ministry_assignments: safeAssignments,
+          })
+          .eq("id", currentVolunteer.id);
+      }
+
+      queryClient.invalidateQueries({
+        queryKey: ["volunteers", organizationId],
       });
 
-      queryClient.invalidateQueries({ queryKey: ["volunteers", profile?.organizationId] });
-      setAddDialogOpen(false);
-      setNewVolunteerName("");
-      setNewVolunteerEmail("");
-      setNewVolunteerAccessLevel("volunteer");
-      setNewVolunteerWhatsapp("");
-      setNewVolunteerAcceptsNotifications(true);
-    } catch (error: any) {
+      setFormOpen(false);
+    } catch (e: any) {
       toast({
-        title: "Erro ao adicionar",
-        description: error.message || "Tente novamente.",
+        title: "Erro",
+        description: e.message,
         variant: "destructive",
       });
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
+
+  /* =========================
+     DELETE
+  ========================= */
+
+  const handleDeleteVolunteer = async () => {
+    if (!volunteerToDelete || !organizationId) return;
+
+    const today = new Date().toISOString();
+
+    const { data } = await supabase
+      .from("services")
+      .select("id")
+      .gte("date", today)
+      .contains("assignments", [{ volunteer_id: volunteerToDelete.id }])
+      .eq("organization_id", organizationId);
+
+    if (data?.length) {
+      toast({
+        title: "Não é possível excluir",
+        description: "Este voluntário possui escalas futuras.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await supabase
+      .from("volunteers")
+      .delete()
+      .eq("id", volunteerToDelete.id);
+
+    queryClient.invalidateQueries({
+      queryKey: ["volunteers", organizationId],
+    });
+
+    setDeleteOpen(false);
+    setVolunteerToDelete(null);
+  };
+
+  /* =========================
+     RENDER
+  ========================= */
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Users className="w-6 h-6 text-primary" />
-            Voluntários
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie os voluntários da sua organização
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="outline" className="text-sm">
-            {volunteers?.length || 0} cadastrados
-          </Badge>
-          {isAdmin && (
-            <Button onClick={() => setAddDialogOpen(true)} data-testid="button-add-volunteer">
-              <Plus className="w-4 h-4 mr-2" />
-              Adicionar
-            </Button>
-          )}
-        </div>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Users className="w-6 h-6" /> Voluntários
+        </h1>
+
+        {(isAdmin || isLeader) && (
+          <Button onClick={openAddForm}>
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar
+          </Button>
+        )}
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-32 rounded-xl bg-slate-100 animate-pulse" />
-          ))}
+      {isLoading && (
+        <div className="flex justify-center py-10">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
-      ) : volunteers && volunteers.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {volunteers.map((volunteer) => {
-            const vAssignments = (volunteer.ministryAssignments || []) as MinistryAssignment[];
-            
-            return (
-              <Card key={volunteer.id} data-testid={`card-volunteer-${volunteer.id}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <User className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{volunteer.name}</CardTitle>
-                        {volunteer.email && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Mail className="w-3 h-3" />
-                            {volunteer.email}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {isAdmin && (
-                      <Button 
-                        size="icon" 
-                        variant="ghost"
-                        onClick={() => handleEditClick(volunteer)}
-                        data-testid={`button-edit-volunteer-${volunteer.id}`}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0 space-y-2">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    {getAccessLevelBadge(volunteer.accessLevel, vAssignments)}
-                    {!volunteer.authUserId && (
-                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 bg-amber-50">
-                        Pendente
-                      </Badge>
-                    )}
-                  </div>
-                  {vAssignments.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {vAssignments.map((a) => (
-                        <Badge 
-                          key={a.ministryId} 
-                          variant="outline" 
-                          className={`text-xs ${a.isLeader 
-                            ? "bg-blue-50 text-blue-700 border-blue-200" 
-                            : "bg-slate-50 text-slate-600 border-slate-200"}`}
-                        >
-                          {a.isLeader && <Star className="w-2.5 h-2.5 mr-1" />}
-                          <Church className={`w-2.5 h-2.5 mr-1 ${a.isLeader ? "hidden" : ""}`} />
-                          {getMinistryName(a.ministryId)}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-3">
-              <Users className="w-7 h-7 text-slate-300" />
-            </div>
-            <p className="text-base font-medium text-foreground">Nenhum voluntário encontrado</p>
-            <p className="text-muted-foreground text-sm text-center mt-1">
-              {isAdmin ? "Adicione voluntários pelo botão acima." : "Os voluntários aparecem aqui após se registrarem."}
-            </p>
-          </CardContent>
-        </Card>
       )}
 
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Voluntário</DialogTitle>
-            <DialogDescription>
-              Configure os ministérios e permissões de {selectedVolunteer?.name}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nível de Acesso Base</label>
-              <Select
-                value={newAccessLevel}
-                onValueChange={setNewAccessLevel}
-              >
-                <SelectTrigger data-testid="select-edit-access">
-                  <SelectValue placeholder="Selecione o nível" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="volunteer">Voluntário</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Selecione "Admin" para acesso total ou configure liderança por ministério abaixo.
-              </p>
-            </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {visibleVolunteers?.map((v) => {
+          const isActive = !!v.authUserId;
+          const isVolunteerLeader = v.ministryAssignments?.some(
+            (a) => a.isLeader
+          );
 
-            {ministries && ministries.length > 0 && (
-              <div className="space-y-3 pt-2 border-t">
-                <div className="flex items-center gap-2">
-                  <Church className="w-4 h-4 text-muted-foreground" />
-                  <label className="text-sm font-medium">Ministérios</label>
-                </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {ministries.map((ministry) => {
-                    const assignment = ministryAssignments.find(a => a.ministryId === ministry.id);
-                    const isAssigned = !!assignment;
-                    const isLeader = assignment?.isLeader || false;
-                    
-                    return (
-                      <div key={ministry.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`ministry-${ministry.id}`}
-                            checked={isAssigned}
-                            onCheckedChange={() => handleToggleMinistry(ministry.id)}
-                            data-testid={`checkbox-ministry-${ministry.id}`}
-                          />
-                          <label htmlFor={`ministry-${ministry.id}`} className="text-sm cursor-pointer">
-                            {ministry.name}
-                          </label>
+          return (
+            <Card
+              key={v.id}
+              className="group transition hover:shadow-md focus-within:shadow-md"
+            >
+              <CardHeader className="flex flex-row gap-3 pb-3">
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-semibold">
+                    {getInitials(v.name)}
+                  </div>
+
+                  {isVolunteerLeader && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="absolute -bottom-1 -right-1 bg-background border rounded-full p-0.5">
+                          <Star className="w-3 h-3 opacity-70" />
                         </div>
-                        {isAssigned && (
-                          <Button
-                            size="sm"
-                            variant={isLeader ? "default" : "outline"}
-                            className={isLeader ? "bg-blue-600" : ""}
-                            onClick={() => handleToggleLeader(ministry.id)}
-                            data-testid={`button-leader-${ministry.id}`}
-                          >
-                            <Star className="w-3 h-3 mr-1" />
-                            {isLeader ? "Líder" : "Membro"}
-                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Líder de ministério</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-base truncate">
+                    {v.name}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {v.email}
+                  </p>
+                </div>
+
+                <div className="flex gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                        onClick={() => openEditForm(v)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Editar</TooltipContent>
+                  </Tooltip>
+
+                  {canDeleteVolunteer(v) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition text-destructive"
+                          onClick={() => {
+                            setVolunteerToDelete(v);
+                            setDeleteOpen(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Excluir</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="secondary">
+                    <UserCheck className="w-3 h-3 mr-1" />
+                    Voluntário
+                  </Badge>
+
+                  <Badge
+                    className={
+                      isActive
+                        ? "bg-green-100 text-green-800"
+                        : "bg-yellow-100 text-yellow-800"
+                    }
+                  >
+                    {isActive ? (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Ativo
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-3 h-3 mr-1" />
+                        Aguardando
+                      </>
+                    )}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-1">
+                  {v.ministryAssignments?.map((a) => {
+                    const ministry = ministries?.find(
+                      (m) => m.id === a.ministryId
+                    );
+                    if (!ministry) return null;
+
+                    return (
+                      <Badge
+                        key={a.ministryId}
+                        variant="outline"
+                        className="text-xs flex items-center gap-1"
+                      >
+                        {renderMinistryIcon(ministry.icon)}
+                        {ministry.name}
+                        {a.isLeader && (
+                          <Star className="w-3 h-3 opacity-60 ml-1" />
                         )}
-                      </div>
+                      </Badge>
                     );
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Líderes podem criar escalas e gerenciar voluntários do seu ministério.
-                </p>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
-            <div className="space-y-3 pt-2 border-t">
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-muted-foreground" />
-                  WhatsApp
-                </label>
-                <Input
-                  type="tel"
-                  placeholder="(00) 00000-0000"
-                  value={editWhatsapp}
-                  onChange={(e) => setEditWhatsapp(e.target.value)}
-                  data-testid="input-edit-whatsapp"
-                />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
-                <div className="flex items-center gap-2">
-                  {editAcceptsNotifications ? (
-                    <Bell className="w-4 h-4 text-green-600" />
-                  ) : (
-                    <BellOff className="w-4 h-4 text-muted-foreground" />
-                  )}
-                  <label className="text-sm font-medium">Aceita notificações</label>
-                </div>
-                <Switch
-                  checked={editAcceptsNotifications}
-                  onCheckedChange={setEditAcceptsNotifications}
-                  data-testid="switch-edit-notifications"
-                />
-              </div>
-            </div>
-          </div>
+      {/* DELETE */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Excluir voluntário
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação é irreversível.
+            </DialogDescription>
+          </DialogHeader>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveVolunteer} disabled={isSaving} data-testid="button-save-access">
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                "Salvar"
-              )}
+            <Button variant="destructive" onClick={handleDeleteVolunteer}>
+              Excluir
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent>
+      {/* FORM */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Adicionar Voluntário</DialogTitle>
+            <DialogTitle>
+              {formMode === "add"
+                ? "Adicionar voluntário"
+                : "Editar voluntário"}
+            </DialogTitle>
             <DialogDescription>
-              Cadastre um voluntário pelo e-mail. Quando ele se registrar, será vinculado automaticamente.
+              {formMode === "add"
+                ? "Preencha os dados do novo voluntário"
+                : "Atualize os dados do voluntário"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">E-mail</label>
-              <Input
-                type="email"
-                placeholder="voluntario@email.com"
-                value={newVolunteerEmail}
-                onChange={(e) => setNewVolunteerEmail(e.target.value)}
-                data-testid="input-new-volunteer-email"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome (opcional)</label>
-              <Input
-                type="text"
-                placeholder="Nome do voluntário"
-                value={newVolunteerName}
-                onChange={(e) => setNewVolunteerName(e.target.value)}
-                data-testid="input-new-volunteer-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nível de Acesso</label>
-              <Select
-                value={newVolunteerAccessLevel}
-                onValueChange={setNewVolunteerAccessLevel}
-              >
-                <SelectTrigger data-testid="select-new-access">
-                  <SelectValue placeholder="Selecione o nível" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="volunteer">Voluntário</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Você pode configurar ministérios e liderança após o cadastro.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <Phone className="w-4 h-4 text-muted-foreground" />
-                WhatsApp (opcional)
+
+          <div className="space-y-5">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">
+                Nome completo <span className="text-destructive">*</span>
               </label>
               <Input
-                type="tel"
-                placeholder="(00) 00000-0000"
-                value={newVolunteerWhatsapp}
-                onChange={(e) => setNewVolunteerWhatsapp(e.target.value)}
-                data-testid="input-new-volunteer-whatsapp"
+                placeholder="Ex: João da Silva"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
               />
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
-              <div className="flex items-center gap-2">
-                {newVolunteerAcceptsNotifications ? (
-                  <Bell className="w-4 h-4 text-green-600" />
-                ) : (
-                  <BellOff className="w-4 h-4 text-muted-foreground" />
-                )}
-                <label className="text-sm font-medium">Aceita notificações</label>
-              </div>
-              <Switch
-                checked={newVolunteerAcceptsNotifications}
-                onCheckedChange={setNewVolunteerAcceptsNotifications}
-                data-testid="switch-new-volunteer-notifications"
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">
+                E-mail <span className="text-destructive">*</span>
+              </label>
+              <Input value={formEmail} disabled />
+              <p className="text-xs text-muted-foreground">
+                O e-mail não pode ser alterado após o cadastro.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">WhatsApp</label>
+              <Input
+                placeholder="(11) 91234-5678"
+                value={formWhatsapp}
+                onChange={(e) =>
+                  setFormWhatsapp(maskWhatsapp(e.target.value))
+                }
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleAddVolunteer} disabled={isSaving} data-testid="button-save-new-volunteer">
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                "Adicionar"
+            <Button disabled={saving} onClick={handleSubmit}>
+              {saving && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               )}
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>

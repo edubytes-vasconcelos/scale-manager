@@ -118,7 +118,9 @@ export function useVolunteers(organizationId: string | null | undefined) {
         email: v.email,
         whatsapp: v.whatsapp,
         acceptsNotifications: v.accepts_notifications,
-        ministryAssignments: v.ministry_assignments,
+        ministryAssignments: Array.isArray(v.ministry_assignments)
+          ? v.ministry_assignments
+          : [],
         createdAt: v.created_at,
       })) as Volunteer[];
     },

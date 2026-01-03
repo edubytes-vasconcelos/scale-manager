@@ -1,15 +1,32 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useCallback,
+} from "react";
 import { supabase } from "@/lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 
-type VolunteerProfile = {
+/* =========================================================
+   Types
+========================================================= */
+
+export type MinistryAssignment = {
+  ministryId: string;
+  isLeader: boolean;
+};
+
+export type VolunteerProfile = {
   id: string;
   authUserId: string;
   organizationId: string | null;
   accessLevel: string | null;
   name: string;
   email: string | null;
+  ministry_assignments: MinistryAssignment[];
 };
 
 type AuthContextType = {
@@ -22,6 +39,10 @@ type AuthContextType = {
   refreshVolunteerProfile: () => Promise<void>;
 };
 
+/* =========================================================
+   Context
+========================================================= */
+
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
@@ -32,6 +53,10 @@ const AuthContext = createContext<AuthContextType>({
   refreshVolunteerProfile: async () => {},
 });
 
+/* =========================================================
+   Provider
+========================================================= */
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -39,74 +64,108 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+
   const { toast } = useToast();
 
-  const fetchVolunteerProfile = useCallback(async (authUserId: string): Promise<VolunteerProfile | null> => {
-    // Fetch all matching profiles, prioritizing those with organization_id
-    const { data, error } = await supabase
-      .from("volunteers")
-      .select("id, auth_user_id, organization_id, access_level, name, email")
-      .eq("auth_user_id", authUserId)
-      .order("organization_id", { ascending: false, nullsFirst: false })
-      .limit(1)
-      .maybeSingle();
+  /* ---------------------------------------------------------
+     Fetch Volunteer Profile
+  --------------------------------------------------------- */
+  const fetchVolunteerProfile = useCallback(
+    async (authUserId: string): Promise<VolunteerProfile | null> => {
+      const { data, error } = await supabase
+        .from("volunteers")
+        .select(`
+          id,
+          auth_user_id,
+          organization_id,
+          access_level,
+          name,
+          email,
+          ministry_assignments
+        `)
+        .eq("auth_user_id", authUserId)
+        .order("organization_id", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Error fetching volunteer profile:", error);
-      return null;
-    }
+      if (error) {
+        console.error("❌ Error fetching volunteer profile:", error);
+        return null;
+      }
 
-    if (!data) return null;
+      if (!data) return null;
 
-    return {
-      id: data.id,
-      authUserId: data.auth_user_id,
-      organizationId: data.organization_id,
-      accessLevel: data.access_level,
-      name: data.name,
-      email: data.email,
-    };
-  }, []);
+      return {
+        id: data.id,
+        authUserId: data.auth_user_id,
+        organizationId: data.organization_id,
+        accessLevel: data.access_level,
+        name: data.name,
+        email: data.email,
+        ministry_assignments: data.ministry_assignments ?? [],
+      };
+    },
+    []
+  );
 
+  /* ---------------------------------------------------------
+     Claim profile (RPC)
+  --------------------------------------------------------- */
   const claimProfile = useCallback(async () => {
     try {
       await supabase.rpc("claim_profile");
     } catch (error) {
-      console.error("Error claiming profile:", error);
+      console.error("❌ Error claiming profile:", error);
     }
   }, []);
 
-  const loadUserData = useCallback(async (currentSession: Session | null, isInitial: boolean = false) => {
-    setAuthReady(false);
-    
-    if (!currentSession?.user) {
-      setSession(null);
-      setUser(null);
-      setVolunteer(null);
+  /* ---------------------------------------------------------
+     Load user + volunteer data
+  --------------------------------------------------------- */
+  const loadUserData = useCallback(
+    async (currentSession: Session | null, isInitial = false) => {
+      setAuthReady(false);
+
+      if (!currentSession?.user) {
+        setSession(null);
+        setUser(null);
+        setVolunteer(null);
+        if (isInitial) setInitialLoadDone(true);
+        setLoading(false);
+        setAuthReady(true);
+        return;
+      }
+
+      setSession(currentSession);
+      setUser(currentSession.user);
+
+      // Vincula auth_user_id ao volunteer (caso ainda não esteja)
+      await claimProfile();
+
+      const profile = await fetchVolunteerProfile(
+        currentSession.user.id
+      );
+
+      setVolunteer(profile);
+
       if (isInitial) setInitialLoadDone(true);
       setLoading(false);
       setAuthReady(true);
-      return;
-    }
+    },
+    [claimProfile, fetchVolunteerProfile]
+  );
 
-    setSession(currentSession);
-    setUser(currentSession.user);
-
-    await claimProfile();
-
-    const profile = await fetchVolunteerProfile(currentSession.user.id);
-    setVolunteer(profile);
-    if (isInitial) setInitialLoadDone(true);
-    setLoading(false);
-    setAuthReady(true);
-  }, [claimProfile, fetchVolunteerProfile]);
-
+  /* ---------------------------------------------------------
+     Init + Auth listener
+  --------------------------------------------------------- */
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       loadUserData(session, true);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (initialLoadDone) {
         loadUserData(session, false);
       }
@@ -115,34 +174,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [loadUserData, initialLoadDone]);
 
+  /* ---------------------------------------------------------
+     Sign out
+  --------------------------------------------------------- */
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
+
     if (error) {
       toast({
         title: "Erro ao sair",
         description: error.message,
         variant: "destructive",
       });
-    } else {
-      setSession(null);
-      setUser(null);
-      setVolunteer(null);
+      return;
     }
+
+    setSession(null);
+    setUser(null);
+    setVolunteer(null);
   };
 
+  /* ---------------------------------------------------------
+     Manual refresh (useful after updates)
+  --------------------------------------------------------- */
   const refreshVolunteerProfile = async () => {
     if (!user) return;
-    
+
     await claimProfile();
     const profile = await fetchVolunteerProfile(user.id);
     setVolunteer(profile);
   };
 
+  /* ---------------------------------------------------------
+     Provider
+  --------------------------------------------------------- */
   return (
-    <AuthContext.Provider value={{ session, user, volunteer, loading, authReady, signOut, refreshVolunteerProfile }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user,
+        volunteer,
+        loading,
+        authReady,
+        signOut,
+        refreshVolunteerProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
+
+/* =========================================================
+   Hook
+========================================================= */
 
 export const useAuth = () => useContext(AuthContext);
