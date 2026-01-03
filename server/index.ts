@@ -6,6 +6,21 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
+});
+// debug: intercept process.exit to log a stack trace when something forces an exit
+const _originalProcessExit = process.exit;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(process as any).exit = (code?: number) => {
+  console.error("process.exit called with code:", code);
+  console.error(new Error("process.exit stacktrace").stack);
+  return _originalProcessExit(code as number);
+};
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
