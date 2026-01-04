@@ -1,0 +1,26 @@
+services:
+  voluntarios:
+    container_name: scale-manager-voluntarios
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 🔥 ADICIONE ISTO:
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    image: scale-manager/voluntarios:latest
+    restart: unless-stopped
+    networks:
+      - traefik
+    # ❌ REMOVA O 'environment:' - não funciona para variáveis VITE_
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.voluntarios.rule=Host(`voluntario.seventech.cloud`)"
+      - "traefik.http.routers.voluntarios.entrypoints=websecure"
+      - "traefik.http.routers.voluntarios.tls.certresolver=le"
+      - "traefik.http.services.voluntarios.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+    name: stack-seventech_proxy
