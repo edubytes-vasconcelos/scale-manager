@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useVolunteerProfile,
   useVolunteers,
@@ -30,73 +30,99 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   CalendarDays,
-  Check,
-  ChevronLeft,
-  ChevronRight,
   List,
   Plus,
-  Trash2,
+  ChevronLeft,
+  ChevronRight,
   Users,
+  Trash2,
+  Check,
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import {
-  addDays,
-  addMonths,
-  addWeeks,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
   format,
+  parseISO,
   isBefore,
   isSameDay,
-  isSameMonth,
-  parseISO,
   startOfMonth,
+  endOfMonth,
   startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  addMonths,
   subMonths,
+  addDays,
+  addWeeks,
+  isSameMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Service, ServiceAssignment } from "@shared/schema";
 
 /* =====================================================
+   TIPOS LOCAIS
+===================================================== */
+
+type MinistryAssignment = {
+  ministryId: string;
+  isLeader?: boolean;
+};
+
+type VolunteerProfileExtended = {
+  id: string;
+  accessLevel: "admin" | "leader" | "volunteer";
+  organizationId: string;
+  ministryAssignments?: MinistryAssignment[];
+};
+
+/* =====================================================
    COMPONENT
-   ===================================================== */
+===================================================== */
 
 export default function Schedules() {
-  /* =======================
-     DATA
-  ======================= */
-  const { data: profile } = useVolunteerProfile();
+  const { data: profileRaw } = useVolunteerProfile();
+  const profile = profileRaw as VolunteerProfileExtended | undefined;
+
   const { data: services } = useServices(profile?.organizationId);
   const { data: volunteers } = useVolunteers(profile?.organizationId);
   const { data: eventTypes } = useEventTypes(profile?.organizationId);
   const { toast } = useToast();
 
-  /* =======================
-     STATE
-  ======================= */
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
-  // criação
+  // ✅ filtros
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterMineOnly, setFilterMineOnly] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "pending" | "confirmed" | "declined"
+  >("all");
+  const [filterTime, setFilterTime] = useState<"all" | "future" | "past">(
+    "future"
+  );
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterEventType, setFilterEventType] = useState("all");
+  const [quickChip, setQuickChip] = useState<
+    "none" | "myPending" | "today" | "week"
+  >("none");
+
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [isSavingCreate, setIsSavingCreate] = useState(false);
   const [newDate, setNewDate] = useState("");
   const [newEventTypeId, setNewEventTypeId] = useState("");
   const [newCustomName, setNewCustomName] = useState("");
-  const [recurrenceType, setRecurrenceType] =
-    useState<"none" | "daily" | "weekly">("none");
+  const [recurrenceType, setRecurrenceType] = useState<
+    "none" | "daily" | "weekly"
+  >("none");
   const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
 
-  // gestão de voluntários
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
   const [isSavingAssign, setIsSavingAssign] = useState(false);
 
-  // RSVP recusa
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -105,99 +131,77 @@ export default function Schedules() {
   const isAdminOrLeader = isAdmin || isLeader;
 
   /* =======================
-     CAMADA 3 — LÍDER (MINISTÉRIOS QUE ELE LIDERA)
-     Observação: ministryAssignments / ministryAssignments dos voluntários são JSONB,
-     então tratamos com "any" para não depender de tipos/tabelas.
+     CAMADA 3 — LÍDER
   ======================= */
+
   const leaderMinistryIds = useMemo(() => {
-    const mas = (profile as any)?.ministryAssignments as any[] | undefined;
-    if (!mas || !Array.isArray(mas)) return [];
-    return mas.filter(ma => ma?.isLeader).map(ma => ma?.ministryId).filter(Boolean);
+    if (!profile?.ministryAssignments) return [];
+    return profile.ministryAssignments
+      .filter((m) => m.isLeader)
+      .map((m) => m.ministryId);
   }, [profile]);
 
   const canDeleteService = (service: Service): boolean => {
-    // Admin sempre pode
     if (isAdmin) return true;
-
-    // Só líder daqui pra baixo
     if (!isLeader) return false;
+    if (!volunteers) return false;
 
     const assignments = (service.assignments || []) as ServiceAssignment[];
 
-    // Regra 1: escala vazia
     if (assignments.length === 0) return true;
-
-    // Líder sem ministérios -> não exclui escala com voluntários
     if (leaderMinistryIds.length === 0) return false;
 
-    // Regra 2: todos os voluntários devem pertencer a ministérios que o líder lidera
-    return assignments.every(a => {
-      const v = volunteers?.find(vol => vol.id === a.volunteerId);
-      const vMas = (v as any)?.ministryAssignments as any[] | undefined;
-      if (!vMas || !Array.isArray(vMas)) return false;
+    return assignments.every((a) => {
+      const v = volunteers.find((vol) => vol.id === a.volunteerId);
+      if (!v) return false;
 
-      return vMas.some(ma => leaderMinistryIds.includes(ma?.ministryId));
+      const vMas = (v as any).ministryAssignments as
+        | MinistryAssignment[]
+        | undefined;
+      if (!vMas) return false;
+
+      return vMas.some((ma) => leaderMinistryIds.includes(ma.ministryId));
     });
   };
 
   /* =======================
      HELPERS
   ======================= */
+
   const getVolunteerName = (id?: string) =>
-    volunteers?.find(v => v.id === id)?.name || "—";
+    volunteers?.find((v) => v.id === id)?.name || "—";
 
   const getServiceTitle = (service: Service) => {
     if (service.title?.trim()) return service.title;
-
-    const eventType = eventTypes?.find(e => e.id === service.eventTypeId);
+    const eventType = eventTypes?.find((e) => e.id === service.eventTypeId);
     if (eventType) return eventType.name;
-
     return format(parseISO(service.date), "EEEE dd/MM", { locale: ptBR });
   };
 
-  /* =======================
-     CAMADA 2 — ESTATÍSTICAS
-  ======================= */
   const getServiceStats = (service: Service) => {
     const assignments = (service.assignments || []) as ServiceAssignment[];
     const total = assignments.length;
-    const confirmed = assignments.filter(a => a.status === "confirmed").length;
-    const declined = assignments.filter(a => a.status === "declined").length;
-    return { total, confirmed, declined };
+    const confirmed = assignments.filter((a) => a.status === "confirmed").length;
+    return { total, confirmed };
   };
 
   const getServiceSummaryBadge = (service: Service) => {
     const { total, confirmed } = getServiceStats(service);
 
-    if (total === 0) {
-      return (
-        <Badge className="bg-slate-100 text-slate-700 border">
-          Sem voluntários
-        </Badge>
-      );
-    }
+    if (total === 0)
+      return <Badge className="bg-slate-100 text-slate-700">Sem voluntários</Badge>;
 
-    if (confirmed === total) {
-      return (
-        <Badge className="bg-green-100 text-green-800 border">
-          Escala completa
-        </Badge>
-      );
-    }
+    if (confirmed === total)
+      return <Badge className="bg-green-100 text-green-800">Escala completa</Badge>;
 
-    if (confirmed > 0) {
+    if (confirmed > 0)
       return (
-        <Badge className="bg-amber-100 text-amber-800 border">
+        <Badge className="bg-amber-100 text-amber-800">
           Parcial ({confirmed}/{total})
         </Badge>
       );
-    }
 
-    return (
-      <Badge className="bg-slate-100 text-slate-700 border">
-        Pendente
-      </Badge>
-    );
+    return <Badge className="bg-slate-100 text-slate-700">Pendente</Badge>;
   };
 
   const getStatusBadge = (status?: string) => {
@@ -209,14 +213,208 @@ export default function Schedules() {
   };
 
   const myAssignment = (service: Service) =>
-    service.assignments?.find(a => a.volunteerId === (profile as any)?.id);
+    service.assignments?.find((a) => a.volunteerId === profile?.id);
 
   const isPastService = (service: Service) =>
     isBefore(parseISO(service.date), new Date());
 
+  const openAssignDialog = (service: Service) => {
+    setSelectedService(service);
+    setSelectedVolunteerId("");
+    setAssignDialogOpen(true);
+  };
+
+  const openDeclineDialog = (service: Service) => {
+    setSelectedService(service);
+    setDeclineReason("");
+    setDeclineDialogOpen(true);
+  };
+
+  const resetCreateForm = () => {
+    setNewDate("");
+    setNewEventTypeId("");
+    setNewCustomName("");
+    setRecurrenceType("none");
+    setRecurrenceEndDate("");
+  };
+
+  /* =======================
+     FILTROS
+  ======================= */
+
+  const clearFilters = () => {
+    setFilterSearch("");
+    setFilterMineOnly(false);
+    setFilterStatus("all");
+    setFilterTime("future");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setFilterEventType("all");
+    setQuickChip("none");
+  };
+
+  const hasActiveFilters = !!(
+    filterSearch.trim() ||
+    filterMineOnly ||
+    filterStatus !== "all" ||
+    filterTime !== "future" ||
+    filterDateFrom ||
+    filterDateTo ||
+    filterEventType !== "all" ||
+    quickChip !== "none"
+  );
+
+  const applyQuickChip = (chip: "myPending" | "today" | "week") => {
+    // toggle
+    if (quickChip === chip) {
+      setQuickChip("none");
+      return;
+    }
+
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const today = parseISO(todayStr);
+
+    setQuickChip(chip);
+
+    if (chip === "myPending") {
+      setFilterMineOnly(true);
+      setFilterStatus("pending");
+      setFilterTime("future");
+      setFilterDateFrom("");
+      setFilterDateTo("");
+      return;
+    }
+
+    if (chip === "today") {
+      setFilterSearch("");
+      setFilterMineOnly(false);
+      setFilterStatus("all");
+      setFilterTime("all");
+      setFilterDateFrom(todayStr);
+      setFilterDateTo(todayStr);
+      return;
+    }
+
+    // week
+    const start = startOfWeek(today, { weekStartsOn: 0 });
+    const end = endOfWeek(today, { weekStartsOn: 0 });
+    setFilterSearch("");
+    setFilterMineOnly(false);
+    setFilterStatus("all");
+    setFilterTime("all");
+    setFilterDateFrom(format(start, "yyyy-MM-dd"));
+    setFilterDateTo(format(end, "yyyy-MM-dd"));
+  };
+
+  const filteredServices = useMemo(() => {
+    if (!services) return [];
+
+    const now = new Date();
+    const todayStr = format(now, "yyyy-MM-dd");
+    const today = parseISO(todayStr);
+
+    const startWeek = startOfWeek(today, { weekStartsOn: 0 });
+    const endWeek = endOfWeek(today, { weekStartsOn: 0 });
+
+    return services.filter((service) => {
+      const serviceDate = parseISO(service.date);
+      const assignments = (service.assignments || []) as ServiceAssignment[];
+      const my = profile?.id
+        ? assignments.find((a) => a.volunteerId === profile.id)
+        : undefined;
+
+      // 🔍 busca por texto (título)
+      if (filterSearch.trim()) {
+        const text = getServiceTitle(service).toLowerCase();
+        if (!text.includes(filterSearch.trim().toLowerCase())) return false;
+      }
+
+      // 🏷️ tipo de evento
+      if (filterEventType !== "all" && service.eventTypeId !== filterEventType)
+        return false;
+
+      // 📅 time (passadas/futuras/todas)
+      if (filterTime === "future" && isBefore(serviceDate, now)) return false;
+      if (filterTime === "past" && !isBefore(serviceDate, now)) return false;
+
+      // 📅 intervalo manual (from/to)
+      if (filterDateFrom && isBefore(serviceDate, parseISO(filterDateFrom)))
+        return false;
+      if (filterDateTo && isBefore(parseISO(filterDateTo), serviceDate))
+        return false;
+
+      // 🧩 chips rápidos (today/week)
+      if (quickChip === "today") {
+        if (!isSameDay(serviceDate, today)) return false;
+      }
+      if (quickChip === "week") {
+        if (isBefore(serviceDate, startWeek) || isBefore(endWeek, serviceDate))
+          return false;
+      }
+
+      // 👤 somente minhas escalas
+      if (filterMineOnly && !my) return false;
+
+      // ✅ status pessoal (minha resposta)
+      if (filterStatus !== "all") {
+        if (!my || my.status !== filterStatus) return false;
+      }
+
+      // 🧩 chip "minhas pendentes" (atalho)
+      if (quickChip === "myPending") {
+        if (!my || my.status !== "pending") return false;
+      }
+
+      return true;
+    });
+  }, [
+    services,
+    profile?.id,
+    filterSearch,
+    filterMineOnly,
+    filterStatus,
+    filterTime,
+    filterDateFrom,
+    filterDateTo,
+    filterEventType,
+    quickChip,
+    eventTypes,
+  ]);
+
+  /* =======================
+     CONTADORES (CHIPS)
+  ======================= */
+  const chipCounts = useMemo(() => {
+    if (!services || !profile?.id) return { myPending: 0, today: 0, week: 0 };
+
+    const now = new Date();
+    const todayStr = format(now, "yyyy-MM-dd");
+    const today = parseISO(todayStr);
+
+    const startWeek = startOfWeek(today, { weekStartsOn: 0 });
+    const endWeek = endOfWeek(today, { weekStartsOn: 0 });
+
+    let myPending = 0;
+    let todayCount = 0;
+    let weekCount = 0;
+
+    for (const s of services) {
+      const d = parseISO(s.date);
+      const assignments = (s.assignments || []) as ServiceAssignment[];
+      const my = assignments.find((a) => a.volunteerId === profile.id);
+
+      if (my?.status === "pending" && !isBefore(d, now)) myPending += 1;
+      if (isSameDay(d, today)) todayCount += 1;
+      if (!isBefore(d, startWeek) && !isBefore(endWeek, d)) weekCount += 1;
+    }
+
+    return { myPending, today: todayCount, week: weekCount };
+  }, [services, profile?.id]);
+
   /* =======================
      RECORRÊNCIA
   ======================= */
+
   const getMinEndDate = () => {
     if (!newDate) return "";
     const start = new Date(newDate);
@@ -234,122 +432,104 @@ export default function Schedules() {
   };
 
   /* =======================
-     ACTIONS
+     CREATE
   ======================= */
-  const resetCreateForm = () => {
-    setNewDate("");
-    setNewEventTypeId("");
-    setNewCustomName("");
-    setRecurrenceType("none");
-    setRecurrenceEndDate("");
-  };
 
   const handleCreateService = async () => {
-  if (!isAdminOrLeader) return;
-  if (!newDate) {
-    toast({ variant: "destructive", title: "Informe a data" });
-    return;
-  }
+    if (!isAdminOrLeader || !profile || !newDate) return;
 
-  if (!newEventTypeId && !newCustomName.trim()) {
-    toast({ variant: "destructive", title: "Informe um tipo ou nome" });
-    return;
-  }
+    const title =
+      newCustomName.trim() ||
+      eventTypes?.find((e) => e.id === newEventTypeId)?.name ||
+      "Evento";
 
-  const title =
-    newCustomName.trim() ||
-    eventTypes?.find(e => e.id === newEventTypeId)?.name ||
-    "Evento";
+    setIsSavingCreate(true);
 
-  setIsSavingCreate(true);
+    try {
+      const baseDate = parseISO(newDate);
+      const dates: string[] = [newDate];
 
-  try {
-    const baseDate = parseISO(newDate); // 🔑 FIX CRÍTICO
-    const dates: string[] = [newDate];
+      if (recurrenceType !== "none" && recurrenceEndDate) {
+        let cursor = baseDate;
+        const end = parseISO(recurrenceEndDate);
 
-    if (recurrenceType !== "none" && recurrenceEndDate) {
-      const end = parseISO(recurrenceEndDate);
-      let cursor = baseDate;
-
-      while (true) {
-        cursor =
-          recurrenceType === "daily"
-            ? addDays(cursor, 1)
-            : addWeeks(cursor, 1); // ✅ mantém o mesmo dia da semana
-
-        if (cursor > end) break;
-
-        dates.push(format(cursor, "yyyy-MM-dd"));
+        while (true) {
+          cursor = recurrenceType === "daily" ? addDays(cursor, 1) : addWeeks(cursor, 1);
+          if (cursor > end) break;
+          dates.push(format(cursor, "yyyy-MM-dd"));
+        }
       }
+
+      const payload = dates.map((date) => ({
+        id_uuid: crypto.randomUUID(),
+        date,
+        title,
+        event_type_id: newEventTypeId || null,
+        organization_id: profile.organizationId,
+        assignments: [],
+        created_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from("services").insert(payload);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setCreateDialogOpen(false);
+      resetCreateForm();
+
+      toast({
+        title: "Escala criada!",
+        description: `${dates.length} evento(s) criado(s).`,
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao criar escala",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingCreate(false);
     }
-
-    const payload = dates.map(date => ({
-      id_uuid: crypto.randomUUID(),
-      date,
-      title,
-      event_type_id: newEventTypeId || null,
-      organization_id: profile?.organizationId,
-      assignments: [],
-      created_at: new Date().toISOString(),
-    }));
-
-    const { error } = await supabase.from("services").insert(payload);
-    if (error) throw error;
-
-    queryClient.invalidateQueries({ queryKey: ["services"] });
-    toast({ title: "Escala criada com sucesso" });
-    setCreateDialogOpen(false);
-    resetCreateForm();
-  } catch (err: any) {
-    toast({
-      variant: "destructive",
-      title: "Erro ao criar escala",
-      description: err?.message || "Tente novamente.",
-    });
-  } finally {
-    setIsSavingCreate(false);
-  }
-};
-
-
-  const handleDeleteService = async (service: Service) => {
-  if (!canDeleteService(service)) {
-    toast({
-      variant: "destructive",
-      title: "Permissão negada",
-      description:
-        "Você só pode excluir escalas vazias ou escalas onde todos os voluntários pertençam a ministérios que você lidera.",
-    });
-    return;
-  }
-
-  if (!confirm("Deseja excluir esta escala?")) return;
-
-  const { error } = await supabase.rpc("delete_service_if_allowed", {
-    p_service_id: service.id_uuid,
-  });
-
-  if (error) {
-    toast({
-      variant: "destructive",
-      title: "Erro ao excluir",
-      description: error.message,
-    });
-    return;
-  }
-
-  queryClient.invalidateQueries({ queryKey: ["services"] });
-  toast({ title: "Escala excluída com sucesso" });
-};
-
+  };
 
   /* =======================
-     ASSIGN / REMOVE
+     DELETE
   ======================= */
-  const openManageDialog = (service: Service) => {
-    setSelectedService(service);
-    setSelectedVolunteerId("");
-    setAssignDialogOpen(true);
+
+  const handleDeleteService = async (service: Service) => {
+    if (!canDeleteService(service)) return;
+    if (!confirm("Deseja excluir esta escala?")) return;
+
+    const { error } = await supabase.rpc("delete_service_if_allowed", {
+      p_service_id: service.id_uuid,
+    });
+
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      toast({ title: "Escala excluída" });
+    } else {
+      toast({
+        title: "Não foi possível excluir",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  /* =======================
+     ASSIGNMENTS (SAFE)
+  ======================= */
+
+  const fetchAssignments = async (id: string) => {
+    const { data, error } = await supabase
+      .from("services")
+      .select("assignments")
+      .eq("id_uuid", id)
+      .single();
+
+    if (error) throw error;
+    return (data.assignments || []) as ServiceAssignment[];
   };
 
   const handleAddVolunteer = async () => {
@@ -357,36 +537,25 @@ export default function Schedules() {
     setIsSavingAssign(true);
 
     try {
-      const current = (selectedService.assignments || []) as ServiceAssignment[];
-      const already = current.some(a => a.volunteerId === selectedVolunteerId);
-      if (already) {
-        toast({
-          variant: "destructive",
-          title: "Voluntário já está na escala",
-        });
-        return;
-      }
+      const current = await fetchAssignments(selectedService.id_uuid);
+      if (current.some((a) => a.volunteerId === selectedVolunteerId)) return;
 
-      const updated: ServiceAssignment[] = [
-        ...current,
-        { volunteerId: selectedVolunteerId, status: "pending" },
-      ];
+      const updated = [...current, { volunteerId: selectedVolunteerId, status: "pending" }];
 
-      const { error } = await supabase
+      await supabase
         .from("services")
         .update({ assignments: updated })
         .eq("id_uuid", selectedService.id_uuid);
 
-      if (error) throw error;
-
       queryClient.invalidateQueries({ queryKey: ["services"] });
       setSelectedService({ ...selectedService, assignments: updated });
       setSelectedVolunteerId("");
-    } catch (err: any) {
+    } catch (error: any) {
+      console.error(error);
       toast({
-        variant: "destructive",
         title: "Erro ao adicionar voluntário",
-        description: err?.message || "Tente novamente.",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
       });
     } finally {
       setIsSavingAssign(false);
@@ -398,24 +567,22 @@ export default function Schedules() {
     setIsSavingAssign(true);
 
     try {
-      const updated = ((selectedService.assignments || []) as ServiceAssignment[]).filter(
-        a => a.volunteerId !== volunteerId
-      );
+      const current = await fetchAssignments(selectedService.id_uuid);
+      const updated = current.filter((a) => a.volunteerId !== volunteerId);
 
-      const { error } = await supabase
+      await supabase
         .from("services")
         .update({ assignments: updated })
         .eq("id_uuid", selectedService.id_uuid);
 
-      if (error) throw error;
-
       queryClient.invalidateQueries({ queryKey: ["services"] });
       setSelectedService({ ...selectedService, assignments: updated });
-    } catch (err: any) {
+    } catch (error: any) {
+      console.error(error);
       toast({
-        variant: "destructive",
         title: "Erro ao remover voluntário",
-        description: err?.message || "Tente novamente.",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
       });
     } finally {
       setIsSavingAssign(false);
@@ -425,64 +592,64 @@ export default function Schedules() {
   /* =======================
      RSVP
   ======================= */
+
   const handleRSVPConfirm = async (service: Service) => {
-    const updated = (service.assignments || []).map(a =>
-      a.volunteerId === (profile as any)?.id ? { ...a, status: "confirmed" } : a
-    );
+    if (!profile) return;
 
-    const { error } = await supabase
-      .from("services")
-      .update({ assignments: updated })
-      .eq("id_uuid", service.id_uuid);
+    try {
+      const current = await fetchAssignments(service.id_uuid);
+      const updated = current.map((a) =>
+        a.volunteerId === profile.id ? { ...a, status: "confirmed" } : a
+      );
 
-    if (error) {
+      await supabase.from("services").update({ assignments: updated }).eq("id_uuid", service.id_uuid);
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+
+      toast({ title: "Confirmado!", description: "Sua presença foi confirmada." });
+    } catch (error: any) {
+      console.error(error);
       toast({
-        variant: "destructive",
         title: "Erro ao confirmar",
-        description: error.message,
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
       });
-      return;
     }
-
-    queryClient.invalidateQueries({ queryKey: ["services"] });
-  };
-
-  const openDeclineDialog = (service: Service) => {
-    setSelectedService(service);
-    setDeclineReason("");
-    setDeclineDialogOpen(true);
   };
 
   const handleRSVPDecline = async () => {
-    if (!selectedService) return;
+    if (!selectedService || !profile) return;
 
-    const updated = (selectedService.assignments || []).map(a =>
-      a.volunteerId === (profile as any)?.id
-        ? { ...a, status: "declined", note: declineReason }
-        : a
-    );
+    try {
+      const current = await fetchAssignments(selectedService.id_uuid);
+      const updated = current.map((a) =>
+        a.volunteerId === profile.id
+          ? { ...a, status: "declined", note: declineReason }
+          : a
+      );
 
-    const { error } = await supabase
-      .from("services")
-      .update({ assignments: updated })
-      .eq("id_uuid", selectedService.id_uuid);
+      await supabase
+        .from("services")
+        .update({ assignments: updated })
+        .eq("id_uuid", selectedService.id_uuid);
 
-    if (error) {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setDeclineDialogOpen(false);
+
+      toast({ title: "Recusa registrada", description: "Obrigado por avisar." });
+    } catch (error: any) {
+      console.error(error);
       toast({
-        variant: "destructive",
         title: "Erro ao recusar",
-        description: error.message,
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
       });
-      return;
     }
-
-    queryClient.invalidateQueries({ queryKey: ["services"] });
-    setDeclineDialogOpen(false);
   };
 
   /* =======================
      CALENDAR
   ======================= */
+
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(calendarMonth));
     const end = endOfWeek(endOfMonth(calendarMonth));
@@ -490,11 +657,12 @@ export default function Schedules() {
   }, [calendarMonth]);
 
   const servicesForDay = (day: Date) =>
-    services?.filter(s => isSameDay(parseISO(s.date), day)) || [];
+    services?.filter((s) => isSameDay(parseISO(s.date), day)) || [];
 
   /* =======================
      JSX
   ======================= */
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -504,9 +672,7 @@ export default function Schedules() {
             <CalendarDays className="w-6 h-6" />
             Escalas
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie escalas e confirmações
-          </p>
+          <p className="text-sm text-muted-foreground">Gerencie escalas e confirmações</p>
         </div>
 
         <div className="flex gap-2 flex-wrap">
@@ -532,10 +698,133 @@ export default function Schedules() {
         </div>
       </div>
 
-      {/* LISTA */}
+      {/* Filters Section */}
+      <Card className="mb-4">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Chips rápidos */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={quickChip === "myPending" ? "default" : "outline"}
+              onClick={() => applyQuickChip("myPending")}
+              className={`transition-all duration-200 ${
+                quickChip === "myPending" ? "scale-[1.02] shadow-sm" : ""
+              }`}
+            >
+              Minhas pendentes ({chipCounts.myPending})
+            </Button>
+
+            <Button
+              type="button"
+              variant={quickChip === "today" ? "default" : "outline"}
+              onClick={() => applyQuickChip("today")}
+              className={`transition-all duration-200 ${
+                quickChip === "today" ? "scale-[1.02] shadow-sm" : ""
+              }`}
+            >
+              Hoje ({chipCounts.today})
+            </Button>
+
+            <Button
+              type="button"
+              variant={quickChip === "week" ? "default" : "outline"}
+              onClick={() => applyQuickChip("week")}
+              className={`transition-all duration-200 ${
+                quickChip === "week" ? "scale-[1.02] shadow-sm" : ""
+              }`}
+            >
+              Esta semana ({chipCounts.week})
+            </Button>
+
+            {hasActiveFilters && (
+              <Button variant="ghost" onClick={clearFilters} className="ml-auto">
+                Limpar
+              </Button>
+            )}
+          </div>
+
+          {/* Filtros detalhados */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <Input
+              placeholder="Buscar por título..."
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+            />
+
+            <Select value={filterEventType} onValueChange={setFilterEventType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Tipo de evento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                {eventTypes?.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Meu status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Meu status (todos)</SelectItem>
+                <SelectItem value="pending">Pendente</SelectItem>
+                <SelectItem value="confirmed">Confirmado</SelectItem>
+                <SelectItem value="declined">Recusado</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={filterTime} onValueChange={(v) => setFilterTime(v as any)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Período" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="future">Futuras</SelectItem>
+                <SelectItem value="past">Passadas</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              type="button"
+              variant={filterMineOnly ? "default" : "outline"}
+              onClick={() => setFilterMineOnly((v) => !v)}
+              className="transition-all duration-200"
+            >
+              Minhas escalas
+            </Button>
+
+            <div className="space-y-1 md:col-span-2">
+              <Label>De</Label>
+              <Input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <Label>Até</Label>
+              <Input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* View Mode Toggle */}
       {viewMode === "list" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {services?.map(service => {
+          {filteredServices.map((service) => {
             const my = myAssignment(service);
             const assignments = (service.assignments || []) as ServiceAssignment[];
 
@@ -544,9 +833,7 @@ export default function Schedules() {
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <CardTitle className="text-base">
-                        {getServiceTitle(service)}
-                      </CardTitle>
+                      <CardTitle className="text-base">{getServiceTitle(service)}</CardTitle>
                       <p className="text-sm text-muted-foreground">
                         {format(parseISO(service.date), "dd/MM/yyyy")}
                       </p>
@@ -558,7 +845,7 @@ export default function Schedules() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => openManageDialog(service)}
+                          onClick={() => openAssignDialog(service)}
                           title="Gerenciar voluntários"
                         >
                           <Users className="w-4 h-4" />
@@ -589,9 +876,7 @@ export default function Schedules() {
                           key={`${service.id_uuid}-${idx}`}
                           className="flex items-center justify-between gap-2"
                         >
-                          <span className="truncate">
-                            {getVolunteerName(a.volunteerId)}
-                          </span>
+                          <span className="truncate">{getVolunteerName(a.volunteerId)}</span>
                           {getStatusBadge(a.status)}
                         </div>
                       ))}
@@ -609,11 +894,7 @@ export default function Schedules() {
                         <Check className="w-4 h-4 mr-1" /> Confirmar
                       </Button>
 
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openDeclineDialog(service)}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => openDeclineDialog(service)}>
                         <X className="w-4 h-4 mr-1" /> Recusar
                       </Button>
                     </div>
@@ -637,7 +918,6 @@ export default function Schedules() {
         </div>
       )}
 
-      {/* CALENDÁRIO */}
       {viewMode === "calendar" && (
         <div className="border rounded-xl overflow-hidden">
           <div className="flex justify-between items-center p-4 border-b">
@@ -670,11 +950,9 @@ export default function Schedules() {
                   !isSameMonth(day, calendarMonth) ? "bg-slate-50" : ""
                 }`}
               >
-                <div className="text-xs text-right">
-                  {format(day, "d")}
-                </div>
+                <div className="text-xs text-right">{format(day, "d")}</div>
 
-                {servicesForDay(day).map(s => (
+                {servicesForDay(day).map((s) => (
                   <div
                     key={s.id_uuid}
                     className="text-xs bg-primary/10 rounded p-1 mt-1 truncate"
@@ -703,7 +981,7 @@ export default function Schedules() {
               <Input
                 type="date"
                 value={newDate}
-                onChange={e => {
+                onChange={(e) => {
                   setNewDate(e.target.value);
                   setRecurrenceEndDate("");
                 }}
@@ -717,7 +995,7 @@ export default function Schedules() {
                   <SelectValue placeholder="Selecione um tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {eventTypes?.map(et => (
+                  {eventTypes?.map((et) => (
                     <SelectItem key={et.id} value={et.id}>
                       {et.name}
                     </SelectItem>
@@ -737,7 +1015,7 @@ export default function Schedules() {
               <Input
                 placeholder="Ex: Reunião Especial"
                 value={newCustomName}
-                onChange={e => setNewCustomName(e.target.value)}
+                onChange={(e) => setNewCustomName(e.target.value)}
               />
             </div>
 
@@ -748,7 +1026,7 @@ export default function Schedules() {
 
               <RadioGroup
                 value={recurrenceType}
-                onValueChange={v => {
+                onValueChange={(v) => {
                   setRecurrenceType(v as any);
                   setRecurrenceEndDate("");
                 }}
@@ -776,7 +1054,7 @@ export default function Schedules() {
                     min={getMinEndDate()}
                     max={getMaxEndDate()}
                     value={recurrenceEndDate}
-                    onChange={e => setRecurrenceEndDate(e.target.value)}
+                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
                   />
                 </div>
               )}
@@ -852,12 +1130,15 @@ export default function Schedules() {
             {/* ADICIONAR */}
             <div className="space-y-2 pt-2 border-t">
               <Label>Adicionar voluntário</Label>
-              <Select value={selectedVolunteerId} onValueChange={setSelectedVolunteerId}>
+              <Select
+                value={selectedVolunteerId}
+                onValueChange={setSelectedVolunteerId}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um voluntário" />
                 </SelectTrigger>
                 <SelectContent>
-                  {volunteers?.map(v => (
+                  {volunteers?.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.name}
                     </SelectItem>
@@ -865,7 +1146,11 @@ export default function Schedules() {
                 </SelectContent>
               </Select>
 
-              <Button onClick={handleAddVolunteer} disabled={isSavingAssign} className="w-full">
+              <Button
+                onClick={handleAddVolunteer}
+                disabled={isSavingAssign}
+                className="w-full"
+              >
                 Adicionar
               </Button>
             </div>
@@ -885,7 +1170,7 @@ export default function Schedules() {
 
           <Textarea
             value={declineReason}
-            onChange={e => setDeclineReason(e.target.value)}
+            onChange={(e) => setDeclineReason(e.target.value)}
             placeholder="Ex: compromisso familiar, viagem, trabalho..."
           />
 

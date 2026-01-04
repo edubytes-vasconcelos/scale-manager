@@ -1,84 +1,143 @@
-import { Service } from "@shared/schema";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { Calendar, CheckCircle2, Clock4, X, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Service } from "@shared/schema"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
+import {
+  Calendar,
+  CheckCircle2,
+  Clock4,
+  X,
+  Users,
+  Check,
+} from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 interface ServiceCardProps {
-  service: Service;
-  volunteerId?: string | null;
+  service: Service
+  volunteerId?: string | null
+
+  /** callbacks opcionais (não quebram quem não usar) */
+  onConfirm?: (serviceId: string) => void
+  onDecline?: (serviceId: string) => void
 }
 
-export function ServiceCard({ service, volunteerId }: ServiceCardProps) {
-  
-  const date = new Date(service.date);
-  const formattedDate = format(date, "EEEE, d 'de' MMMM", { locale: ptBR });
-  
-  const assignments = (service.assignments || []) as any[];
-  const myAssignment = volunteerId 
-    ? assignments.find((a: any) => a.volunteerId === volunteerId) 
-    : null;
-  const totalVolunteers = assignments.length;
+export function ServiceCard({
+  service,
+  volunteerId,
+  onConfirm,
+  onDecline,
+}: ServiceCardProps) {
+  const date = new Date(service.date)
+  const formattedDate = format(date, "EEEE, d 'de' MMMM", {
+    locale: ptBR,
+  })
 
-  const getStatusBadge = () => {
-    if (!myAssignment) return null;
-    
+  const assignments = (service.assignments || []) as any[]
+  const myAssignment = volunteerId
+    ? assignments.find((a: any) => a.volunteerId === volunteerId)
+    : null
+
+  const totalVolunteers = assignments.length
+
+  const renderStatus = () => {
+    if (!myAssignment) {
+      return (
+        <span className="text-sm text-muted-foreground">
+          Você não está escalado
+        </span>
+      )
+    }
+
     switch (myAssignment.status) {
-      case 'confirmed':
+      case "confirmed":
         return (
-          <Badge variant="default" className="bg-green-100 text-green-800 border-green-300">
-            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+          <Badge variant="success">
+            <CheckCircle2 className="h-3.5 w-3.5" />
             Confirmado
           </Badge>
-        );
-      case 'pending':
+        )
+
+      case "pending":
         return (
-          <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300">
-            <Clock4 className="w-3.5 h-3.5 mr-1" />
+          <Badge variant="warning">
+            <Clock4 className="h-3.5 w-3.5" />
             Pendente
           </Badge>
-        );
-      case 'declined':
+        )
+
+      case "declined":
         return (
-          <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-300">
-            <X className="w-3.5 h-3.5 mr-1" />
+          <Badge variant="destructive">
+            <X className="h-3.5 w-3.5" />
             Recusado
           </Badge>
-        );
+        )
+
       default:
-        return null;
+        return null
     }
-  };
+  }
+
+  const renderCTA = () => {
+    if (!myAssignment || myAssignment.status !== "pending") return null
+
+    return (
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <Button
+          variant="success"
+          size="sm"
+          onClick={() => onConfirm?.(service.id)}
+        >
+          <Check className="h-4 w-4 mr-1" />
+          Confirmar
+        </Button>
+
+        <Button
+          variant="destructive-outline"
+          size="sm"
+          onClick={() => onDecline?.(service.id)}
+        >
+          <X className="h-4 w-4 mr-1" />
+          Não irei
+        </Button>
+      </div>
+    )
+  }
 
   return (
-    <div className="group relative overflow-hidden bg-card rounded-2xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300">
+    <div className="group relative overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/30">
       <div className="p-6">
-        <div className="flex flex-col gap-2 mb-4">
-          <div className="flex items-center gap-2 text-primary font-medium text-sm uppercase tracking-wider">
-            <Calendar className="w-4 h-4" />
+        {/* HEADER */}
+        <div className="mb-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-primary">
+            <Calendar className="h-4 w-4" />
             {formattedDate}
           </div>
-          <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
+
+          <h3 className="text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-primary">
             {service.title}
           </h3>
         </div>
-        
-        <div className="pt-4 border-t border-border/50 flex items-center justify-between gap-2">
+
+        {/* INFO + STATUS */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Users className="w-4 h-4" />
-            <span>{totalVolunteers} voluntário{totalVolunteers !== 1 ? 's' : ''}</span>
+            <Users className="h-4 w-4" />
+            <span>
+              {totalVolunteers} voluntário
+              {totalVolunteers !== 1 ? "s" : ""}
+            </span>
           </div>
-          
-          {myAssignment ? (
-            getStatusBadge()
-          ) : (
-            <span className="text-sm text-muted-foreground">Você não está escalado</span>
-          )}
+
+          {renderStatus()}
         </div>
+
+        {/* CTA */}
+        {renderCTA()}
       </div>
-      
-      {/* Decorative accent */}
-      <div className="absolute top-0 left-0 w-1 h-full bg-primary/0 group-hover:bg-primary transition-colors duration-300" />
+
+      {/* ACCENT */}
+      <div className="absolute left-0 top-0 h-full w-1 bg-primary/0 transition-colors duration-300 group-hover:bg-primary" />
     </div>
-  );
+  )
 }
