@@ -1,24 +1,31 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useLocation, Link } from "wouter";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowRight } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useAuthForm } from "@/hooks/use-auth-form";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [_, setLocation] = useLocation();
   const { session } = useAuth();
-  const { toast } = useToast();
+  const {
+    email,
+    setEmail,
+    password,
+    setPassword,
+    name,
+    setName,
+    loading,
+    socialLoading,
+    isSignUp,
+    handleLogin,
+    handleSignUp,
+    handleGoogleLogin,
+    toggleAuthMode,
+  } = useAuthForm();
 
   useEffect(() => {
     if (session) {
@@ -26,108 +33,6 @@ export default function Login() {
     }
   }, [session, setLocation]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.session) {
-        toast({
-          title: "Bem-vindo de volta!",
-          description: "Login realizado com sucesso.",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro no login",
-        description: error.message || "Verifique suas credenciais e tente novamente.",
-        variant: "destructive",
-      });
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!name.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Por favor, informe seu nome completo.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (password.length < 6) {
-      toast({
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 6 caracteres.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            name: name.trim(),
-          },
-        },
-      });
-
-      if (authError) throw authError;
-
-      if (authData.user) {
-        toast({
-          title: "Cadastro realizado!",
-          description: "Sua conta foi criada com sucesso.",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro no cadastro",
-        description: error.message || "Não foi possível criar sua conta.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setSocialLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-
-      if (error) throw error;
-    } catch (error: any) {
-      toast({
-        title: "Erro ao entrar com Google",
-        description: error.message || "Não foi possível conectar com o Google.",
-        variant: "destructive",
-      });
-    } finally {
-      setSocialLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
@@ -249,11 +154,7 @@ export default function Login() {
           <div className="mt-8 text-center space-y-3">
             <button
               type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setName("");
-                setPassword("");
-              }}
+              onClick={toggleAuthMode}
               className="text-sm text-primary font-medium hover:underline"
               data-testid="toggle-auth-mode"
             >

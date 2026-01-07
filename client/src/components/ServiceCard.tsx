@@ -1,5 +1,5 @@
 import { Service } from "@shared/schema"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import {
   Calendar,
@@ -27,7 +27,7 @@ export function ServiceCard({
   onConfirm,
   onDecline,
 }: ServiceCardProps) {
-  const date = new Date(service.date)
+  const date = parseISO(service.date)
   const formattedDate = format(date, "EEEE, d 'de' MMMM", {
     locale: ptBR,
   })

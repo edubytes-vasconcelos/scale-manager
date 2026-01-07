@@ -30,7 +30,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { format, isAfter, addDays } from "date-fns";
+import { format, isAfter, addDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
@@ -78,10 +78,10 @@ export default function Dashboard() {
     if (!mySchedules || mySchedules.length === 0) return null;
     const today = new Date();
     const futureSchedules = mySchedules
-      .filter((s) => isAfter(new Date(s.date), addDays(today, -1)))
+      .filter((s) => isAfter(parseISO(s.date), addDays(today, -1)))
       .sort(
         (a, b) =>
-          new Date(a.date).getTime() - new Date(b.date).getTime()
+          parseISO(a.date).getTime() - parseISO(b.date).getTime()
       );
     return futureSchedules[0] || null;
   }, [mySchedules]);
@@ -249,7 +249,7 @@ export default function Dashboard() {
                   {nextSchedule.title}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {format(new Date(nextSchedule.date), "d 'de' MMM", {
+                  {format(parseISO(nextSchedule.date), "d 'de' MMM", {
                     locale: ptBR,
                   })}
                 </p>
@@ -299,11 +299,9 @@ export default function Dashboard() {
                   <div>
                     <p className="font-semibold">{schedule.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(
-                        new Date(schedule.date),
-                        "EEEE, d 'de' MMMM",
-                        { locale: ptBR }
-                      )}
+                      {format(parseISO(schedule.date), "EEEE, d 'de' MMMM", {
+                        locale: ptBR,
+                      })}
                     </p>
                   </div>
 
