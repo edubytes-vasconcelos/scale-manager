@@ -7,6 +7,9 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   root: "client",
+  css: {
+    postcss: path.resolve(__dirname, "client/postcss.config.cjs"),
+  },
 
   resolve: {
     alias: {
