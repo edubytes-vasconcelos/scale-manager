@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 interface ServiceCardProps {
   service: Service
   volunteerId?: string | null
+  showActions?: boolean
 
   /** callbacks opcionais (não quebram quem não usar) */
   onConfirm?: (serviceId: string) => void
@@ -24,6 +25,7 @@ interface ServiceCardProps {
 export function ServiceCard({
   service,
   volunteerId,
+  showActions = true,
   onConfirm,
   onDecline,
 }: ServiceCardProps) {
@@ -79,6 +81,7 @@ export function ServiceCard({
   }
 
   const renderCTA = () => {
+    if (!showActions) return null
     if (!myAssignment || myAssignment.status !== "pending") return null
 
     return (

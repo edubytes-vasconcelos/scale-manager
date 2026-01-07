@@ -374,6 +374,7 @@ export default function Dashboard() {
                   key={service.id}
                   service={service}
                   volunteerId={volunteer?.id}
+                  showActions={false}
                 />
               ))}
             </div>
