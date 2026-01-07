@@ -370,7 +370,11 @@ export default function Dashboard() {
           ) : futureServices.length > 0 ? (
             <div className="grid md:grid-cols-2 gap-6">
               {futureServices.map((service) => (
-                <ServiceCard key={service.id} service={service} />
+                <ServiceCard
+                  key={service.id}
+                  service={service}
+                  volunteerId={volunteer?.id}
+                />
               ))}
             </div>
           ) : (
