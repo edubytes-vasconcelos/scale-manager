@@ -51,10 +51,8 @@ module.exports = {
         },
 
         /* =========================
-           TOKENS SEMÂNTICOS NOVOS
-           (paleta aprovada)
+           TOKENS SEMANTICOS
         ========================== */
-
         success: {
           100: "#DCFCE7",
           500: "#22C55E",
