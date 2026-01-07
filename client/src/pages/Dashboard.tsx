@@ -112,6 +112,7 @@ export default function Dashboard() {
       await updateStatus.mutateAsync({
         serviceId,
         volunteerId: volunteer.id,
+        organizationId: volunteer.organizationId || "",
         status,
       });
       toast({
@@ -149,6 +150,7 @@ export default function Dashboard() {
       await updateStatus.mutateAsync({
         serviceId: selectedScheduleId,
         volunteerId: volunteer.id,
+        organizationId: volunteer.organizationId || "",
         status: "declined",
         note: declineNote.trim() || undefined,
       });
