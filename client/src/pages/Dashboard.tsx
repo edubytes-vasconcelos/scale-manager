@@ -86,6 +86,14 @@ export default function Dashboard() {
     return futureSchedules[0] || null;
   }, [mySchedules]);
 
+  const futureServices = useMemo(() => {
+    if (!services) return [];
+    const today = new Date();
+    return services.filter((service) =>
+      isAfter(parseISO(service.date), addDays(today, -1))
+    );
+  }, [services]);
+
   const getMyStatus = (service: any) => {
     if (!service.assignments || !volunteer?.id) return null;
     const assignment = service.assignments.find(
@@ -359,9 +367,9 @@ export default function Dashboard() {
                 />
               ))}
             </div>
-          ) : services && services.length > 0 ? (
+          ) : futureServices.length > 0 ? (
             <div className="grid md:grid-cols-2 gap-6">
-              {services.map((service) => (
+              {futureServices.map((service) => (
                 <ServiceCard key={service.id} service={service} />
               ))}
             </div>
