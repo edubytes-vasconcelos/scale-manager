@@ -72,12 +72,12 @@ export function useMySchedules(volunteerId: string | null | undefined, organizat
     queryKey: ["my-schedules", volunteerId, organizationId],
     queryFn: async () => {
       if (!volunteerId || !organizationId) return [];
-      
+      const localDate = new Date().toLocaleDateString("en-CA");
       const { data, error } = await supabase
         .from("services")
         .select("*")
         .eq("organization_id", organizationId)
-        .gte("date", new Date().toISOString().split('T')[0])
+        .gte("date", localDate)
         .order("date", { ascending: true });
 
       if (error) throw error;
