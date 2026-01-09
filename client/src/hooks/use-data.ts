@@ -206,36 +206,16 @@ export function useUpdateAssignmentStatus() {
       status: "confirmed" | "declined" | "pending";
       note?: string;
     }) => {
-      const { data: service, error: fetchError } = await supabase
-        .from("services")
-        .select("assignments")
-        .eq("id", serviceId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const assignments = (service.assignments || []) as any[];
-      const updatedAssignments = assignments.map((a: any) => {
-        if (a.volunteerId === volunteerId) {
-          const updated: any = { ...a, status };
-          if (note) {
-            updated.note = note;
-          } else if (status !== "declined") {
-            delete updated.note;
-          }
-          return updated;
-        }
-        return a;
+      const { error } = await supabase.rpc("update_service_assignment_status", {
+        p_service_id: serviceId,
+        p_volunteer_id: volunteerId,
+        p_status: status,
+        p_note: note ?? null,
       });
 
-      const { error: updateError } = await supabase
-        .from("services")
-        .update({ assignments: updatedAssignments })
-        .eq("id", serviceId);
+      if (error) throw error;
 
-      if (updateError) throw updateError;
-      
-      return { serviceId, volunteerId, organizationId, updatedAssignments };
+      return { serviceId, volunteerId, organizationId };
     },
     onSuccess: (data) => {
       // Invalidate with exact keys to ensure proper cache refresh
