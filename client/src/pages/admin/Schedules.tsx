@@ -501,8 +501,9 @@ export default function Schedules() {
     if (!canDeleteService(service)) return;
     if (!confirm("Deseja excluir esta escala?")) return;
 
+    const serviceId = (service as any).id_uuid ?? service.id;
     const { error } = await supabase.rpc("delete_service_if_allowed", {
-      p_service_id: service.id_uuid,
+      p_service_id: serviceId,
     });
 
     if (!error) {
