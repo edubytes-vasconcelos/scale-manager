@@ -486,7 +486,11 @@ export default function Volunteers() {
               <label className="text-sm font-medium">
                 E-mail <span className="text-destructive">*</span>
               </label>
-              <Input value={formEmail} disabled />
+              <Input
+                value={formEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
+                disabled={formMode === "edit"}
+              />
               <p className="text-xs text-muted-foreground">
                 O e-mail não pode ser alterado após o cadastro.
               </p>
@@ -517,3 +521,4 @@ export default function Volunteers() {
     </div>
   );
 }
+
