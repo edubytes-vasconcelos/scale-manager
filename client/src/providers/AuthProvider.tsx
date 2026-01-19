@@ -24,6 +24,7 @@ export type VolunteerProfile = {
   authUserId: string;
   organizationId: string | null;
   accessLevel: string | null;
+  canManagePreachingSchedule?: boolean;
   name: string;
   email: string | null;
   ministry_assignments: MinistryAssignment[];
@@ -81,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           access_level,
           name,
           email,
-          ministry_assignments
+          ministry_assignments,
+          can_manage_preaching_schedule
         `)
         .eq("auth_user_id", authUserId)
         .order("organization_id", { ascending: false, nullsFirst: false })
@@ -100,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authUserId: data.auth_user_id,
         organizationId: data.organization_id,
         accessLevel: data.access_level,
+        canManagePreachingSchedule: data.can_manage_preaching_schedule ?? false,
         name: data.name,
         email: data.email,
         ministry_assignments: data.ministry_assignments ?? [],

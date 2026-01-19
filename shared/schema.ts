@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -8,6 +8,7 @@ export const volunteers = pgTable("volunteers", {
   authUserId: uuid("auth_user_id"), // null for pre-registered volunteers
   organizationId: uuid("organization_id"),
   accessLevel: text("access_level"), // admin | leader | volunteer
+  canManagePreachingSchedule: boolean("can_manage_preaching_schedule").default(false),
   name: text("name").notNull(),
   email: text("email"),
   whatsapp: text("whatsapp"),
@@ -61,6 +62,30 @@ export type ServiceAssignment = {
   note?: string;
 };
 
+export type Preacher = {
+  id: string;
+  organizationId: string;
+  name: string;
+  nameNormalized: string;
+  type: "interno" | "convidado";
+  church?: string | null;
+  notes?: string | null;
+  createdAt?: string | null;
+};
+
+export type PreacherAssignment = {
+  preacherId: string;
+  name: string;
+  role: "pregador";
+};
+
+export type ServiceAssignmentsPayload =
+  | ServiceAssignment[]
+  | {
+      volunteers?: ServiceAssignment[];
+      preachers?: PreacherAssignment[];
+    };
+
 // Mirrors the existing Supabase 'services' table
 export const services = pgTable("services", {
   id: uuid("id").primaryKey(),
@@ -69,7 +94,7 @@ export const services = pgTable("services", {
   title: text("title").notNull(),
   eventTypeId: uuid("event_type_id"),
   ministryId: uuid("ministry_id"), // links service to a ministry for leader permissions
-  assignments: jsonb("assignments").$type<ServiceAssignment[]>(),
+  assignments: jsonb("assignments").$type<ServiceAssignmentsPayload>(),
   createdAt: timestamp("created_at"),
 });
 

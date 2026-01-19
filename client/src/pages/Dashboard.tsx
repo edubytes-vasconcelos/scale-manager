@@ -34,6 +34,7 @@ import { format, isAfter, addDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
+import { normalizeAssignments } from "@/lib/assignments";
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -57,9 +58,8 @@ export default function Dashboard() {
   const pendingSchedules = useMemo(() => {
     if (!mySchedules || !volunteer?.id) return [];
     return mySchedules.filter((schedule) => {
-      const assignment = schedule.assignments?.find(
-        (a: any) => a.volunteerId === volunteer.id
-      );
+      const { volunteers } = normalizeAssignments(schedule.assignments);
+      const assignment = volunteers.find((a: any) => a.volunteerId === volunteer.id);
       return assignment?.status === "pending";
     });
   }, [mySchedules, volunteer?.id]);
@@ -67,9 +67,8 @@ export default function Dashboard() {
   const confirmedSchedules = useMemo(() => {
     if (!mySchedules || !volunteer?.id) return [];
     return mySchedules.filter((schedule) => {
-      const assignment = schedule.assignments?.find(
-        (a: any) => a.volunteerId === volunteer.id
-      );
+      const { volunteers } = normalizeAssignments(schedule.assignments);
+      const assignment = volunteers.find((a: any) => a.volunteerId === volunteer.id);
       return assignment?.status === "confirmed";
     });
   }, [mySchedules, volunteer?.id]);
@@ -96,9 +95,8 @@ export default function Dashboard() {
 
   const getMyStatus = (service: any) => {
     if (!service.assignments || !volunteer?.id) return null;
-    const assignment = service.assignments.find(
-      (a: any) => a.volunteerId === volunteer.id
-    );
+    const { volunteers } = normalizeAssignments(service.assignments);
+    const assignment = volunteers.find((a: any) => a.volunteerId === volunteer.id);
     return assignment?.status || null;
   };
 

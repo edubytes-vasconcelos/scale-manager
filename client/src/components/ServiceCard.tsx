@@ -1,4 +1,5 @@
 import { Service } from "@shared/schema"
+import { normalizeAssignments } from "@/lib/assignments"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import {
@@ -34,12 +35,12 @@ export function ServiceCard({
     locale: ptBR,
   })
 
-  const assignments = (service.assignments || []) as any[]
+  const { volunteers } = normalizeAssignments(service.assignments)
   const myAssignment = volunteerId
-    ? assignments.find((a: any) => a.volunteerId === volunteerId)
+    ? volunteers.find((a: any) => a.volunteerId === volunteerId)
     : null
 
-  const totalVolunteers = assignments.length
+  const totalVolunteers = volunteers.length
 
   const renderStatus = () => {
     if (!myAssignment) {

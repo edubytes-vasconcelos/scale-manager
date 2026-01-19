@@ -3,7 +3,18 @@ import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { queryClient } from "@/lib/queryClient";
-import type { Service, VolunteerWithOrg, Volunteer, Ministry, Team, EventType, ChatMessage, ChatMessageWithSender } from "@shared/schema";
+import type {
+  Service,
+  VolunteerWithOrg,
+  Volunteer,
+  Ministry,
+  Team,
+  EventType,
+  ChatMessage,
+  ChatMessageWithSender,
+  Preacher,
+} from "@shared/schema";
+import { normalizeAssignments } from "@/lib/assignments";
 
 export function useVolunteerProfile() {
   const { user } = useAuth();
@@ -35,6 +46,7 @@ export function useVolunteerProfile() {
         authUserId: data.auth_user_id,
         organizationId: data.organization_id,
         accessLevel: data.access_level,
+        canManagePreachingSchedule: data.can_manage_preaching_schedule ?? false,
         name: data.name,
         email: data.email,
         whatsapp: data.whatsapp,
@@ -84,11 +96,9 @@ export function useMySchedules(volunteerId: string | null | undefined, organizat
       
       const services = data as Service[];
       
-      return services.filter(service => {
-        if (!service.assignments || !Array.isArray(service.assignments)) return false;
-        return service.assignments.some((assignment: any) => 
-          assignment.volunteerId === volunteerId
-        );
+      return services.filter((service) => {
+        const { volunteers } = normalizeAssignments(service.assignments);
+        return volunteers.some((assignment: any) => assignment.volunteerId === volunteerId);
       });
     },
     enabled: !!volunteerId && !!organizationId,
@@ -114,6 +124,7 @@ export function useVolunteers(organizationId: string | null | undefined) {
         authUserId: v.auth_user_id,
         organizationId: v.organization_id,
         accessLevel: v.access_level,
+        canManagePreachingSchedule: v.can_manage_preaching_schedule ?? false,
         name: v.name,
         email: v.email,
         whatsapp: v.whatsapp,
@@ -232,6 +243,7 @@ export function useCreateVolunteer() {
       email?: string;
       accessLevel?: string;
       organizationId: string;
+      canManagePreachingSchedule?: boolean;
     }) => {
       const { data, error } = await supabase
         .from("volunteers")
@@ -241,6 +253,7 @@ export function useCreateVolunteer() {
           email: volunteer.email || null,
           access_level: volunteer.accessLevel || "volunteer",
           organization_id: volunteer.organizationId,
+          can_manage_preaching_schedule: volunteer.canManagePreachingSchedule ?? false,
         })
         .select()
         .single();
@@ -357,6 +370,92 @@ export function useUpdateTeam() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+    },
+  });
+}
+
+export function usePreachers(organizationId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["preachers", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [];
+
+      const { data, error } = await supabase
+        .from("preachers")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+
+      return data.map((p: any) => ({
+        id: p.id,
+        organizationId: p.organization_id,
+        name: p.name,
+        nameNormalized: p.name_normalized,
+        type: p.type,
+        church: p.church,
+        notes: p.notes,
+        createdAt: p.created_at,
+      })) as Preacher[];
+    },
+    enabled: !!organizationId,
+  });
+}
+
+export function useUpsertPreacher() {
+  return useMutation({
+    mutationFn: async (payload: {
+      organizationId: string;
+      name: string;
+      type?: "interno" | "convidado";
+      church?: string;
+      notes?: string;
+    }) => {
+      const { data, error } = await supabase.rpc("upsert_preacher", {
+        p_organization_id: payload.organizationId,
+        p_name: payload.name,
+        p_type: payload.type ?? "interno",
+        p_church: payload.church || null,
+        p_notes: payload.notes || null,
+      });
+
+      if (error) throw error;
+      return data as Preacher;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["preachers", variables.organizationId] });
+    },
+  });
+}
+
+export function useUpdatePreacher() {
+  return useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      organizationId: string;
+      name: string;
+      type?: "interno" | "convidado";
+      church?: string;
+      notes?: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("preachers")
+        .update({
+          name: payload.name,
+          type: payload.type ?? "interno",
+          church: payload.church || null,
+          notes: payload.notes || null,
+        })
+        .eq("id", payload.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Preacher;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["preachers", variables.organizationId] });
     },
   });
 }

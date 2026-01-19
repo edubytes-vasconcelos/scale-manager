@@ -4,6 +4,9 @@ import {
   useVolunteers,
   useEventTypes,
   useServices,
+  usePreachers,
+  useUpsertPreacher,
+  useUpdatePreacher,
 } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +39,7 @@ import {
   ChevronRight,
   Users,
   Trash2,
+  Pencil,
   Check,
   X,
 } from "lucide-react";
@@ -58,7 +62,16 @@ import {
   isSameMonth,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Service, ServiceAssignment } from "@shared/schema";
+import type {
+  Service,
+  ServiceAssignment,
+  Preacher,
+  ServiceAssignmentsPayload,
+} from "@shared/schema";
+import {
+  buildAssignmentsPayload,
+  normalizeAssignments,
+} from "@/lib/assignments";
 
 /* =====================================================
    TIPOS LOCAIS
@@ -74,6 +87,7 @@ type VolunteerProfileExtended = {
   accessLevel: "admin" | "leader" | "volunteer";
   organizationId: string;
   ministryAssignments?: MinistryAssignment[];
+  canManagePreachingSchedule?: boolean;
 };
 
 /* =====================================================
@@ -86,8 +100,11 @@ export default function Schedules() {
 
   const { data: services } = useServices(profile?.organizationId);
   const { data: volunteers } = useVolunteers(profile?.organizationId);
+  const { data: preachers } = usePreachers(profile?.organizationId);
   const { data: eventTypes } = useEventTypes(profile?.organizationId);
   const { toast } = useToast();
+  const upsertPreacher = useUpsertPreacher();
+  const updatePreacher = useUpdatePreacher();
 
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -122,13 +139,33 @@ export default function Schedules() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
   const [isSavingAssign, setIsSavingAssign] = useState(false);
+  const [preacherSearch, setPreacherSearch] = useState("");
+  const [preacherType, setPreacherType] = useState<
+    "interno" | "convidado"
+  >("interno");
+  const [preacherChurch, setPreacherChurch] = useState("");
+  const [preacherNotes, setPreacherNotes] = useState("");
+  const [isSavingPreacher, setIsSavingPreacher] = useState(false);
+  const [editPreacherOpen, setEditPreacherOpen] = useState(false);
+  const [preacherToEdit, setPreacherToEdit] = useState<Preacher | null>(null);
+  const [editPreacherName, setEditPreacherName] = useState("");
+  const [editPreacherType, setEditPreacherType] = useState<
+    "interno" | "convidado"
+  >("interno");
+  const [editPreacherChurch, setEditPreacherChurch] = useState("");
+  const [editPreacherNotes, setEditPreacherNotes] = useState("");
 
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
+  const [dayPickOpen, setDayPickOpen] = useState(false);
+  const [dayPickServices, setDayPickServices] = useState<Service[]>([]);
   const [declineReason, setDeclineReason] = useState("");
 
   const isAdmin = profile?.accessLevel === "admin";
   const isLeader = profile?.accessLevel === "leader";
   const isAdminOrLeader = isAdmin || isLeader;
+  const canManagePreaching = isAdmin || !!profile?.canManagePreachingSchedule;
+  const canManageSchedules = isAdminOrLeader || canManagePreaching;
+  const canManageVolunteers = isAdminOrLeader;
 
   /* =======================
      CAMADA 3 — LÍDER
@@ -146,7 +183,7 @@ export default function Schedules() {
     if (!isLeader) return false;
     if (!volunteers) return false;
 
-    const assignments = (service.assignments || []) as ServiceAssignment[];
+    const { volunteers: assignments } = getNormalizedAssignments(service);
 
     if (assignments.length === 0) return true;
     if (leaderMinistryIds.length === 0) return false;
@@ -169,7 +206,23 @@ export default function Schedules() {
   ======================= */
 
   const getVolunteerName = (id?: string) =>
-    volunteers?.find((v) => v.id === id)?.name || "—";
+    volunteers?.find((v) => v.id === id)?.name || "-";
+
+  const getPreacherName = (id?: string) =>
+    preachers?.find((p) => p.id === id)?.name || "-";
+
+  const normalizeSearch = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const getNormalizedAssignments = (service?: Service | null) =>
+    normalizeAssignments(
+      (service?.assignments as ServiceAssignmentsPayload | undefined) ?? null
+    );
 
   const getServiceTitle = (service: Service) => {
     if (service.title?.trim()) return service.title;
@@ -179,7 +232,7 @@ export default function Schedules() {
   };
 
   const getServiceStats = (service: Service) => {
-    const assignments = (service.assignments || []) as ServiceAssignment[];
+    const { volunteers: assignments } = getNormalizedAssignments(service);
     const total = assignments.length;
     const confirmed = assignments.filter((a) => a.status === "confirmed").length;
     return { total, confirmed };
@@ -213,7 +266,9 @@ export default function Schedules() {
   };
 
   const myAssignment = (service: Service) =>
-    service.assignments?.find((a) => a.volunteerId === profile?.id);
+    getNormalizedAssignments(service).volunteers.find(
+      (a) => a.volunteerId === profile?.id
+    );
 
   const isPastService = (service: Service) =>
     isBefore(parseISO(service.date), new Date());
@@ -221,6 +276,7 @@ export default function Schedules() {
   const openAssignDialog = (service: Service) => {
     setSelectedService(service);
     setSelectedVolunteerId("");
+    resetPreacherForm();
     setAssignDialogOpen(true);
   };
 
@@ -237,6 +293,36 @@ export default function Schedules() {
     setRecurrenceType("none");
     setRecurrenceEndDate("");
   };
+
+  const resetPreacherForm = () => {
+    setPreacherSearch("");
+    setPreacherType("interno");
+    setPreacherChurch("");
+    setPreacherNotes("");
+  };
+
+  const normalizedPreacherSearch = useMemo(
+    () => normalizeSearch(preacherSearch),
+    [preacherSearch]
+  );
+
+  const filteredPreachers = useMemo(() => {
+    if (!preachers) return [];
+    if (!normalizedPreacherSearch) return preachers;
+    return preachers.filter((p) =>
+      (p.nameNormalized || normalizeSearch(p.name)).includes(
+        normalizedPreacherSearch
+      )
+    );
+  }, [preachers, normalizedPreacherSearch]);
+
+  const exactPreacherMatch = useMemo(() => {
+    if (!normalizedPreacherSearch || !preachers) return null;
+    return preachers.find(
+      (p) =>
+        (p.nameNormalized || normalizeSearch(p.name)) === normalizedPreacherSearch
+    );
+  }, [normalizedPreacherSearch, preachers]);
 
   /* =======================
      FILTROS
@@ -318,7 +404,7 @@ export default function Schedules() {
 
     return services.filter((service) => {
       const serviceDate = parseISO(service.date);
-      const assignments = (service.assignments || []) as ServiceAssignment[];
+      const { volunteers: assignments } = getNormalizedAssignments(service);
       const my = profile?.id
         ? assignments.find((a) => a.volunteerId === profile.id)
         : undefined;
@@ -400,7 +486,7 @@ export default function Schedules() {
 
     for (const s of services) {
       const d = parseISO(s.date);
-      const assignments = (s.assignments || []) as ServiceAssignment[];
+      const { volunteers: assignments } = getNormalizedAssignments(s);
       const my = assignments.find((a) => a.volunteerId === profile.id);
 
       if (my?.status === "pending" && !isBefore(d, now)) myPending += 1;
@@ -436,7 +522,7 @@ export default function Schedules() {
   ======================= */
 
   const handleCreateService = async () => {
-    if (!isAdminOrLeader || !profile || !newDate) return;
+    if (!canManageSchedules || !profile || !newDate) return;
 
     const title =
       newCustomName.trim() ||
@@ -466,14 +552,28 @@ export default function Schedules() {
         title,
         event_type_id: newEventTypeId || null,
         organization_id: profile.organizationId,
-        assignments: [],
+        assignments: buildAssignmentsPayload({ volunteers: [], preachers: [] }),
         created_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from("services").insert(payload);
-      if (error) throw error;
+      let createdService: any = null;
 
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      if (payload.length === 1) {
+        const { data, error } = await supabase
+          .from("services")
+          .insert(payload[0])
+          .select()
+          .single();
+        if (error) throw error;
+        createdService = data;
+      } else {
+        const { error } = await supabase.from("services").insert(payload);
+        if (error) throw error;
+      }
+
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
       setCreateDialogOpen(false);
       resetCreateForm();
 
@@ -481,6 +581,10 @@ export default function Schedules() {
         title: "Escala criada!",
         description: `${dates.length} evento(s) criado(s).`,
       });
+
+      if (createdService) {
+        openAssignDialog(createdService as Service);
+      }
     } catch (error: any) {
       console.error(error);
       toast({
@@ -507,7 +611,9 @@ export default function Schedules() {
     });
 
     if (!error) {
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
       toast({ title: "Escala excluída" });
     } else {
       toast({
@@ -530,26 +636,41 @@ export default function Schedules() {
       .single();
 
     if (error) throw error;
-    return (data.assignments || []) as ServiceAssignment[];
+    return normalizeAssignments(
+      (data.assignments as ServiceAssignmentsPayload | null) ?? null
+    );
   };
 
   const handleAddVolunteer = async () => {
     if (!selectedService || !selectedVolunteerId) return;
+    if (!canManageVolunteers) return;
     setIsSavingAssign(true);
 
     try {
       const current = await fetchAssignments(selectedService.id_uuid);
-      if (current.some((a) => a.volunteerId === selectedVolunteerId)) return;
+      if (current.volunteers.some((a) => a.volunteerId === selectedVolunteerId)) return;
 
-      const updated = [...current, { volunteerId: selectedVolunteerId, status: "pending" }];
+      const updated = {
+        ...current,
+        volunteers: [
+          ...current.volunteers,
+          { volunteerId: selectedVolunteerId, status: "pending" },
+        ],
+      };
 
-      await supabase
+      const { error } = await supabase
         .from("services")
-        .update({ assignments: updated })
+        .update({ assignments: buildAssignmentsPayload(updated) })
         .eq("id_uuid", selectedService.id_uuid);
+      if (error) throw error;
 
-      queryClient.invalidateQueries({ queryKey: ["services"] });
-      setSelectedService({ ...selectedService, assignments: updated });
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
+      setSelectedService({
+        ...selectedService,
+        assignments: buildAssignmentsPayload(updated),
+      });
       setSelectedVolunteerId("");
     } catch (error: any) {
       console.error(error);
@@ -565,19 +686,29 @@ export default function Schedules() {
 
   const handleRemoveVolunteer = async (volunteerId: string) => {
     if (!selectedService) return;
+    if (!canManageVolunteers) return;
     setIsSavingAssign(true);
 
     try {
       const current = await fetchAssignments(selectedService.id_uuid);
-      const updated = current.filter((a) => a.volunteerId !== volunteerId);
+      const updated = {
+        ...current,
+        volunteers: current.volunteers.filter((a) => a.volunteerId !== volunteerId),
+      };
 
-      await supabase
+      const { error } = await supabase
         .from("services")
-        .update({ assignments: updated })
+        .update({ assignments: buildAssignmentsPayload(updated) })
         .eq("id_uuid", selectedService.id_uuid);
+      if (error) throw error;
 
-      queryClient.invalidateQueries({ queryKey: ["services"] });
-      setSelectedService({ ...selectedService, assignments: updated });
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
+      setSelectedService({
+        ...selectedService,
+        assignments: buildAssignmentsPayload(updated),
+      });
     } catch (error: any) {
       console.error(error);
       toast({
@@ -591,6 +722,195 @@ export default function Schedules() {
   };
 
   /* =======================
+     PREGADORES (SAFE)
+  ======================= */
+
+  const handleAddPreacher = async (preacher: Preacher) => {
+    if (!selectedService || !profile) return;
+    setIsSavingPreacher(true);
+
+    try {
+      const current = await fetchAssignments(selectedService.id_uuid);
+      if (current.preachers.some((p) => p.preacherId === preacher.id)) return;
+
+      const updated = {
+        ...current,
+        preachers: [
+          ...current.preachers,
+          { preacherId: preacher.id, name: preacher.name, role: "pregador" },
+        ],
+      };
+
+      const { error } = await supabase
+        .from("services")
+        .update({ assignments: buildAssignmentsPayload(updated) })
+        .eq("id_uuid", selectedService.id_uuid);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
+      setSelectedService({
+        ...selectedService,
+        assignments: buildAssignmentsPayload(updated),
+      });
+      resetPreacherForm();
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao adicionar pregador",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPreacher(false);
+    }
+  };
+
+  const handleRemovePreacher = async (preacherId: string) => {
+    if (!selectedService || !profile) return;
+    setIsSavingPreacher(true);
+
+    try {
+      const current = await fetchAssignments(selectedService.id_uuid);
+      const updated = {
+        ...current,
+        preachers: current.preachers.filter((p) => p.preacherId !== preacherId),
+      };
+
+      const { error } = await supabase
+        .from("services")
+        .update({ assignments: buildAssignmentsPayload(updated) })
+        .eq("id_uuid", selectedService.id_uuid);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
+      setSelectedService({
+        ...selectedService,
+        assignments: buildAssignmentsPayload(updated),
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao remover pregador",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPreacher(false);
+    }
+  };
+
+  const handleCreatePreacher = async () => {
+    if (!profile) return;
+    if (!preacherSearch.trim()) {
+      toast({
+        title: "Nome obrigat¢rio",
+        description: "Informe o nome do pregador.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (exactPreacherMatch) {
+      toast({
+        title: "Este pregador já está cadastrado nesta organização.",
+        variant: "destructive",
+      });
+      await handleAddPreacher(exactPreacherMatch);
+      return;
+    }
+
+    setIsSavingPreacher(true);
+    try {
+      const created = await upsertPreacher.mutateAsync({
+        organizationId: profile.organizationId,
+        name: preacherSearch.trim(),
+        type: preacherType,
+        church: preacherChurch.trim() || undefined,
+        notes: preacherNotes.trim() || undefined,
+      });
+
+      await handleAddPreacher(created);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao cadastrar pregador",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPreacher(false);
+    }
+  };
+
+  const openEditPreacher = (preacher: Preacher) => {
+    setPreacherToEdit(preacher);
+    setEditPreacherName(preacher.name);
+    setEditPreacherType(preacher.type);
+    setEditPreacherChurch(preacher.church || "");
+    setEditPreacherNotes(preacher.notes || "");
+    setEditPreacherOpen(true);
+  };
+
+  const handleUpdatePreacher = async () => {
+    if (!profile || !preacherToEdit) return;
+    if (!editPreacherName.trim()) {
+      toast({
+        title: "Nome obrigat¢rio",
+        description: "Informe o nome do pregador.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingPreacher(true);
+    try {
+      const updated = await updatePreacher.mutateAsync({
+        id: preacherToEdit.id,
+        organizationId: profile.organizationId,
+        name: editPreacherName.trim(),
+        type: editPreacherType,
+        church: editPreacherChurch.trim() || undefined,
+        notes: editPreacherNotes.trim() || undefined,
+      });
+
+      if (selectedService) {
+        const current = await fetchAssignments(selectedService.id_uuid);
+        const next = {
+          ...current,
+          preachers: current.preachers.map((p) =>
+            p.preacherId === updated.id ? { ...p, name: updated.name } : p
+          ),
+        };
+        const { error } = await supabase
+          .from("services")
+          .update({ assignments: buildAssignmentsPayload(next) })
+          .eq("id_uuid", selectedService.id_uuid);
+        if (error) throw error;
+        setSelectedService({
+          ...selectedService,
+          assignments: buildAssignmentsPayload(next),
+        });
+      }
+
+      setEditPreacherOpen(false);
+      setPreacherToEdit(null);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao atualizar pregador",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPreacher(false);
+    }
+  };
+
+  /* =======================
      RSVP
   ======================= */
 
@@ -599,12 +919,21 @@ export default function Schedules() {
 
     try {
       const current = await fetchAssignments(service.id_uuid);
-      const updated = current.map((a) =>
-        a.volunteerId === profile.id ? { ...a, status: "confirmed" } : a
-      );
+      const updated = {
+        ...current,
+        volunteers: current.volunteers.map((a) =>
+          a.volunteerId === profile.id ? { ...a, status: "confirmed" } : a
+        ),
+      };
 
-      await supabase.from("services").update({ assignments: updated }).eq("id_uuid", service.id_uuid);
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      const { error } = await supabase
+        .from("services")
+        .update({ assignments: buildAssignmentsPayload(updated) })
+        .eq("id_uuid", service.id_uuid);
+      if (error) throw error;
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
 
       toast({ title: "Confirmado!", description: "Sua presença foi confirmada." });
     } catch (error: any) {
@@ -622,18 +951,24 @@ export default function Schedules() {
 
     try {
       const current = await fetchAssignments(selectedService.id_uuid);
-      const updated = current.map((a) =>
-        a.volunteerId === profile.id
-          ? { ...a, status: "declined", note: declineReason }
-          : a
-      );
+      const updated = {
+        ...current,
+        volunteers: current.volunteers.map((a) =>
+          a.volunteerId === profile.id
+            ? { ...a, status: "declined", note: declineReason }
+            : a
+        ),
+      };
 
-      await supabase
+      const { error } = await supabase
         .from("services")
-        .update({ assignments: updated })
+        .update({ assignments: buildAssignmentsPayload(updated) })
         .eq("id_uuid", selectedService.id_uuid);
+      if (error) throw error;
 
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
       setDeclineDialogOpen(false);
 
       toast({ title: "Recusa registrada", description: "Obrigado por avisar." });
@@ -659,6 +994,27 @@ export default function Schedules() {
 
   const servicesForDay = (day: Date) =>
     services?.filter((s) => isSameDay(parseISO(s.date), day)) || [];
+
+  const handleDayClick = (day: Date) => {
+    if (!canManageSchedules) return;
+
+    const dayServices = servicesForDay(day);
+    if (dayServices.length === 0) {
+      setNewDate(format(day, "yyyy-MM-dd"));
+      setCreateDialogOpen(true);
+      return;
+    }
+
+    if (dayServices.length === 1) {
+      openAssignDialog(dayServices[0]);
+      return;
+    }
+
+    setDayPickServices(dayServices);
+    setDayPickOpen(true);
+  };
+
+  const selectedAssignments = getNormalizedAssignments(selectedService);
 
   /* =======================
      JSX
@@ -691,7 +1047,7 @@ export default function Schedules() {
             <CalendarDays className="w-4 h-4 mr-1" /> Calendário
           </Button>
 
-          {isAdminOrLeader && (
+          {canManageSchedules && (
             <Button onClick={() => setCreateDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Nova Escala
             </Button>
@@ -827,7 +1183,8 @@ export default function Schedules() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredServices.map((service) => {
             const my = myAssignment(service);
-            const assignments = (service.assignments || []) as ServiceAssignment[];
+            const { volunteers: assignments, preachers: preacherAssignments } =
+              getNormalizedAssignments(service);
 
             return (
               <Card key={service.id_uuid}>
@@ -842,12 +1199,12 @@ export default function Schedules() {
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {isAdminOrLeader && (
+                      {canManageSchedules && (
                         <Button
                           size="icon"
                           variant="ghost"
                           onClick={() => openAssignDialog(service)}
-                          title="Gerenciar voluntários"
+                          title="Gerenciar escala"
                         >
                           <Users className="w-4 h-4" />
                         </Button>
@@ -886,6 +1243,27 @@ export default function Schedules() {
                     <p className="text-sm text-muted-foreground italic">
                       Nenhum voluntário adicionado
                     </p>
+                  )}
+
+                  {preacherAssignments.length > 0 && (
+                    <div className="pt-2 border-t space-y-1 text-sm">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                        Pregadores
+                      </p>
+                      {preacherAssignments.map((p, idx) => (
+                        <div
+                          key={`${service.id_uuid}-preacher-${idx}`}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate">
+                            {getPreacherName(p.preacherId) || p.name}
+                          </span>
+                          <Badge className="bg-indigo-100 text-indigo-800">
+                            Pregador
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
                   )}
 
                   {/* RSVP DO USUÁRIO LOGADO */}
@@ -943,24 +1321,53 @@ export default function Schedules() {
             </Button>
           </div>
 
+          <div className="grid grid-cols-7 bg-slate-100 border-b">
+            {Array.from({ length: 7 }).map((_, idx) => {
+              const label = format(addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), idx), "EEE", {
+                locale: ptBR,
+              });
+              return (
+                <div key={`weekday-${idx}`} className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </div>
+              );
+            })}
+          </div>
+
           <div className="grid grid-cols-7">
             {calendarDays.map((day, idx) => (
               <div
                 key={idx}
                 className={`border p-2 min-h-[100px] ${
                   !isSameMonth(day, calendarMonth) ? "bg-slate-50" : ""
-                }`}
+                } ${canManageSchedules ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                onClick={() => handleDayClick(day)}
               >
                 <div className="text-xs text-right">{format(day, "d")}</div>
 
                 {servicesForDay(day).map((s) => (
+                  (() => {
+                    const { preachers } = getNormalizedAssignments(s);
+                    const preacherNames = preachers
+                      .map((p) => getPreacherName(p.preacherId) || p.name)
+                      .filter((name) => name && name !== "-")
+                      .join(", ");
+
+                    return (
                   <div
                     key={s.id_uuid}
                     className="text-xs bg-primary/10 rounded p-1 mt-1 truncate"
                     title={getServiceTitle(s)}
                   >
                     {getServiceTitle(s)}
+                    {preachers.length > 0 && (
+                      <span className="block text-[10px] text-muted-foreground truncate">
+                        Pregador: {preacherNames || "Definido"}
+                      </span>
+                    )}
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             ))}
@@ -1083,7 +1490,7 @@ export default function Schedules() {
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Gerenciar voluntários</DialogTitle>
+            <DialogTitle>Gerenciar escala</DialogTitle>
             <DialogDescription>
               {selectedService ? getServiceTitle(selectedService) : ""}
             </DialogDescription>
@@ -1091,70 +1498,331 @@ export default function Schedules() {
 
           <div className="space-y-4">
             {/* LISTAGEM ATUAL */}
-            <div className="space-y-2">
-              <Label>Voluntários escalados</Label>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Voluntários escalados</Label>
 
-              {(selectedService?.assignments || []).length > 0 ? (
-                <div className="space-y-2">
-                  {(selectedService?.assignments || []).map((a, idx) => (
-                    <div
-                      key={`sel-${idx}`}
-                      className="flex items-center justify-between gap-2 rounded-md border p-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {getVolunteerName(a.volunteerId)}
-                        </p>
-                        <div className="mt-1">{getStatusBadge(a.status)}</div>
-                      </div>
-
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => handleRemoveVolunteer(a.volunteerId || "")}
-                        disabled={isSavingAssign}
-                        title="Remover"
+                {selectedAssignments.volunteers.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedAssignments.volunteers.map((a, idx) => (
+                      <div
+                        key={`sel-${idx}`}
+                        className="flex items-center justify-between gap-2 rounded-md border p-2"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground italic">
-                  Nenhum voluntário adicionado
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {getVolunteerName(a.volunteerId)}
+                          </p>
+                          <div className="mt-1">{getStatusBadge(a.status)}</div>
+                        </div>
+
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => handleRemoveVolunteer(a.volunteerId || "")}
+                          disabled={!canManageVolunteers || isSavingAssign}
+                          title="Remover"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    Nenhum voluntário adicionado
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Pregadores escalados</Label>
+
+                {selectedAssignments.preachers.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedAssignments.preachers.map((p, idx) => {
+                      const preacherRecord = preachers?.find(
+                        (preacher) => preacher.id === p.preacherId
+                      );
+                      const preacherName =
+                        preacherRecord?.name || p.name || "-";
+
+                      return (
+                        <div
+                          key={`preacher-${idx}`}
+                          className="flex items-center justify-between gap-2 rounded-md border p-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {preacherName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Pregador</p>
+                          </div>
+
+                          {canManagePreaching && preacherRecord && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => openEditPreacher(preacherRecord)}
+                                title="Editar"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={() => handleRemovePreacher(p.preacherId)}
+                                disabled={isSavingPreacher}
+                                title="Remover"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    Nenhum pregador adicionado
+                  </p>
+                )}
+              </div>
+
+              {!canManagePreaching && (
+                <p className="text-xs text-muted-foreground">
+                  Você não tem permissão para editar pregadores.
                 </p>
               )}
             </div>
 
-            {/* ADICIONAR */}
-            <div className="space-y-2 pt-2 border-t">
-              <Label>Adicionar voluntário</Label>
+            {canManageVolunteers && (
+              <div className="space-y-2 pt-2 border-t">
+                <Label>Adicionar voluntário</Label>
+                <Select
+                  value={selectedVolunteerId}
+                  onValueChange={setSelectedVolunteerId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um voluntário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {volunteers?.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  onClick={handleAddVolunteer}
+                  disabled={isSavingAssign}
+                  className="w-full"
+                >
+                  Adicionar
+                </Button>
+              </div>
+            )}
+
+            {canManagePreaching && (
+              <div className="space-y-3 pt-2 border-t">
+                <Label>Adicionar pregador</Label>
+                <Input
+                  placeholder="Buscar ou cadastrar pregador"
+                  value={preacherSearch}
+                  onChange={(e) => setPreacherSearch(e.target.value)}
+                />
+
+                {preacherSearch.trim() && (
+                  <div className="space-y-2">
+                    {filteredPreachers.length > 0 ? (
+                      <div className="max-h-40 overflow-y-auto rounded-md border">
+                        {filteredPreachers.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between gap-2 px-3 py-2 border-b last:border-b-0"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{p.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {p.type === "interno" ? "Interno" : "Convidado"}
+                                {p.church ? ` • ${p.church}` : ""}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAddPreacher(p)}
+                              disabled={isSavingPreacher}
+                            >
+                              Adicionar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhum pregador encontrado. Cadastre abaixo.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid gap-2">
+                  <Select
+                    value={preacherType}
+                    onValueChange={(v) => setPreacherType(v as "interno" | "convidado")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo de pregador" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="interno">Interno</SelectItem>
+                      <SelectItem value="convidado">Convidado</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    placeholder="Igreja (opcional)"
+                    value={preacherChurch}
+                    onChange={(e) => setPreacherChurch(e.target.value)}
+                  />
+
+                  <Textarea
+                    placeholder="Observações (opcional)"
+                    value={preacherNotes}
+                    onChange={(e) => setPreacherNotes(e.target.value)}
+                  />
+                </div>
+
+                <Button
+                  onClick={handleCreatePreacher}
+                  disabled={isSavingPreacher}
+                  className="w-full"
+                >
+                  Cadastrar e adicionar
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={editPreacherOpen}
+        onOpenChange={(open) => {
+          setEditPreacherOpen(open);
+          if (!open) setPreacherToEdit(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar pregador</DialogTitle>
+            <DialogDescription>
+              Atualize os dados do pregador selecionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>Nome</Label>
+              <Input
+                value={editPreacherName}
+                onChange={(e) => setEditPreacherName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Tipo</Label>
               <Select
-                value={selectedVolunteerId}
-                onValueChange={setSelectedVolunteerId}
+                value={editPreacherType}
+                onValueChange={(v) =>
+                  setEditPreacherType(v as "interno" | "convidado")
+                }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione um voluntário" />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {volunteers?.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="interno">Interno</SelectItem>
+                  <SelectItem value="convidado">Convidado</SelectItem>
                 </SelectContent>
               </Select>
-
-              <Button
-                onClick={handleAddVolunteer}
-                disabled={isSavingAssign}
-                className="w-full"
-              >
-                Adicionar
-              </Button>
             </div>
+
+            <div className="space-y-1">
+              <Label>Igreja</Label>
+              <Input
+                value={editPreacherChurch}
+                onChange={(e) => setEditPreacherChurch(e.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Observações</Label>
+              <Textarea
+                value={editPreacherNotes}
+                onChange={(e) => setEditPreacherNotes(e.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditPreacherOpen(false);
+                setPreacherToEdit(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdatePreacher} disabled={isSavingPreacher}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dayPickOpen} onOpenChange={setDayPickOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escolha a escala</DialogTitle>
+            <DialogDescription>
+              Este dia possui mais de uma escala. Selecione qual deseja editar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {dayPickServices.map((service) => (
+              <div
+                key={service.id_uuid}
+                className="flex items-center justify-between gap-2 rounded-md border p-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{getServiceTitle(service)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(parseISO(service.date), "dd/MM/yyyy")}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDayPickOpen(false);
+                    openAssignDialog(service);
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

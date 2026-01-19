@@ -120,6 +120,7 @@ export default function Volunteers() {
   const [formWhatsapp, setFormWhatsapp] = useState("");
   const [formAssignments, setFormAssignments] =
     useState<MinistryAssignment[]>([]);
+  const [formCanManagePreaching, setFormCanManagePreaching] = useState(false);
   const [saving, setSaving] = useState(false);
 
   /* =========================
@@ -150,6 +151,7 @@ export default function Volunteers() {
     setFormName("");
     setFormEmail("");
     setFormWhatsapp("");
+    setFormCanManagePreaching(false);
     setFormAssignments(
       !isAdmin && isLeader && leaderMinistryIds.length === 1
         ? [{ ministryId: leaderMinistryIds[0], isLeader: false }]
@@ -164,6 +166,7 @@ export default function Volunteers() {
     setFormName(v.name);
     setFormEmail(v.email);
     setFormWhatsapp(v.whatsapp || "");
+    setFormCanManagePreaching(!!v.canManagePreachingSchedule);
     setFormAssignments(v.ministryAssignments || []);
     setFormOpen(true);
   };
@@ -197,6 +200,10 @@ export default function Volunteers() {
       ? formAssignments
       : formAssignments.map((a) => ({ ...a, isLeader: false }));
 
+    const canManagePreachingValue = isAdmin
+      ? formCanManagePreaching
+      : currentVolunteer?.canManagePreachingSchedule ?? false;
+
     setSaving(true);
     try {
       if (formMode === "add") {
@@ -208,6 +215,7 @@ export default function Volunteers() {
           organization_id: organizationId,
           access_level: "volunteer",
           ministry_assignments: safeAssignments,
+          can_manage_preaching_schedule: canManagePreachingValue,
         });
       } else if (currentVolunteer) {
         await supabase
@@ -402,6 +410,12 @@ export default function Volunteers() {
                   </Badge>
                 </div>
 
+                {v.canManagePreachingSchedule && (
+                  <Badge className="bg-indigo-100 text-indigo-800">
+                    Gerencia prega‡Æo
+                  </Badge>
+                )}
+
                 <div className="flex flex-wrap gap-1">
                   {v.ministryAssignments?.map((a) => {
                     const ministry = ministries?.find(
@@ -506,6 +520,25 @@ export default function Volunteers() {
                 }
               />
             </div>
+
+            {isAdmin && (
+              <div className="flex items-start gap-3 rounded-lg border p-3">
+                <Checkbox
+                  checked={formCanManagePreaching}
+                  onCheckedChange={(checked) =>
+                    setFormCanManagePreaching(!!checked)
+                  }
+                />
+                <div>
+                  <p className="text-sm font-medium">
+                    Pode gerenciar escala de pregadores
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Permite cadastrar e editar pregadores, al‚m de montar escalas de prega‡Æo.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
