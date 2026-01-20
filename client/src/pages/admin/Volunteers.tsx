@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   useVolunteerProfile,
   useVolunteers,
@@ -142,6 +142,8 @@ export default function Volunteers() {
     useState<MinistryAssignment[]>([]);
   const [formCanManagePreaching, setFormCanManagePreaching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ministryError, setMinistryError] = useState(false);
+  const ministryBlockRef = useRef<HTMLDivElement | null>(null);
 
   /* =========================
      DELETE STATE
@@ -207,16 +209,23 @@ export default function Volunteers() {
       return;
     }
 
-    if (formAssignments.length === 0) {
+    const requiresMinistry = !isAdmin || !formCanManagePreaching;
+    if (requiresMinistry && formAssignments.length === 0) {
+      setMinistryError(true);
+      setTimeout(() => {
+        ministryBlockRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 0);
       toast({
-        title: "Ministério obrigatório",
-        description: "Selecione ao menos um ministério.",
+        title: "Ministerio obrigatorio",
+        description: "Selecione ao menos um ministerio.",
         variant: "destructive",
       });
       return;
     }
 
-    const safeAssignments = isAdmin
+    setMinistryError(false);
+
+const safeAssignments = isAdmin
       ? formAssignments
       : formAssignments.map((a) => ({ ...a, isLeader: false }));
 
@@ -227,7 +236,7 @@ export default function Volunteers() {
     setSaving(true);
     try {
       if (formMode === "add") {
-        await supabase.from("volunteers").insert({
+        const { error } = await supabase.from("volunteers").insert({
           id: crypto.randomUUID(),
           name: formName,
           email: formEmail.toLowerCase(),
@@ -236,16 +245,19 @@ export default function Volunteers() {
           access_level: "volunteer",
           ministry_assignments: safeAssignments,
           can_manage_preaching_schedule: canManagePreachingValue,
-        });
+                });
+        if (error) throw error;
       } else if (currentVolunteer) {
-        await supabase
+        const { error } = await supabase
           .from("volunteers")
           .update({
             name: formName,
             whatsapp: formWhatsapp || null,
             ministry_assignments: safeAssignments,
+            can_manage_preaching_schedule: canManagePreachingValue,
           })
           .eq("id", currentVolunteer.id);
+        if (error) throw error;
       }
 
       queryClient.invalidateQueries({
@@ -300,6 +312,25 @@ export default function Volunteers() {
 
     setDeleteOpen(false);
     setVolunteerToDelete(null);
+  };
+
+  const requiresMinistry = !isAdmin || !formCanManagePreaching;
+  const hasMinistry = formAssignments.length > 0;
+
+  const toggleMinistry = (ministryId: string) => {
+    setFormAssignments((prev) => {
+      const exists = prev.some((a) => a.ministryId === ministryId);
+      if (exists) return prev.filter((a) => a.ministryId !== ministryId);
+      return [...prev, { ministryId, isLeader: false }];
+    });
+  };
+
+  const toggleMinistryLeader = (ministryId: string, isLeader: boolean) => {
+    setFormAssignments((prev) =>
+      prev.map((a) =>
+        a.ministryId === ministryId ? { ...a, isLeader } : a
+      )
+    );
   };
 
   /* =========================
@@ -594,6 +625,87 @@ export default function Volunteers() {
                 </div>
               </div>
             )}
+
+
+            <div
+              ref={ministryBlockRef}
+              className={[
+                "space-y-2 rounded-lg border p-3",
+                requiresMinistry && !hasMinistry ? "border-destructive bg-destructive/5" : "",
+                ministryError ? "ring-1 ring-destructive/60" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">
+                  Ministerios {requiresMinistry && <span className="text-destructive">*</span>}
+                </label>
+                {requiresMinistry && !hasMinistry && (
+                  <span className="text-xs text-destructive">Obrigatorio</span>
+                )}
+              </div>
+
+              {availableMinistries && availableMinistries.length > 0 ? (
+                <div className="space-y-2">
+                  {availableMinistries.map((ministry) => {
+                    const isSelected = formAssignments.some(
+                      (a) => a.ministryId === ministry.id
+                    );
+                    const isLeaderAssignment =
+                      formAssignments.find((a) => a.ministryId === ministry.id)
+                        ?.isLeader || false;
+
+                    return (
+                      <div
+                        key={ministry.id}
+                        className={[
+                          "flex items-start justify-between gap-3 rounded-md border p-2",
+                          ministryError && requiresMinistry && !hasMinistry
+                            ? "border-destructive/60 bg-destructive/5"
+                            : isSelected
+                            ? "border-primary/40 bg-primary/5"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => { setMinistryError(false); toggleMinistry(ministry.id); }}
+                          />
+                          <div>
+                            <p className="text-sm font-medium flex items-center gap-2">
+                              {renderMinistryIcon(ministry.icon)}
+                              {ministry.name}
+                            </p>
+                          </div>
+                        </div>
+
+                        {isAdmin && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                              checked={isLeaderAssignment}
+                              disabled={!isSelected}
+                              onCheckedChange={(checked) =>
+                                toggleMinistryLeader(ministry.id, !!checked)
+                              }
+                            />
+                            <span>Lider</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum ministerio cadastrado.
+                </p>
+              )}
+            </div>
+
           </div>
 
           <DialogFooter>
