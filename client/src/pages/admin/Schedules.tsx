@@ -1410,6 +1410,15 @@ export default function Schedules() {
   };
 
   const selectedAssignments = getNormalizedAssignments(selectedService);
+  const eventTypeNameForSelected = selectedService
+    ? eventTypes?.find((type) => type.id === selectedService.eventTypeId)?.name
+    : null;
+  const showCustomEventName =
+    editEventTypeId === "" || !eventTypeNameForSelected;
+  const isEventDirty =
+    selectedService &&
+    (editEventTitle.trim() !== (selectedService.title || "") ||
+      (editEventTypeId || null) !== (selectedService.eventTypeId || null));
 
   /* =======================
      JSX
@@ -1426,10 +1435,10 @@ export default function Schedules() {
           </h1>
           <p className="text-sm text-muted-foreground">Gerencie escalas e confirmações</p>
           {!canManageSchedules && (
-            <p className="text-xs text-muted-foreground">
-              Você tem acesso somente de leitura.
-            </p>
-          )}
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Voce nao tem permissao para editar o evento.
+              </div>
+            )}
         </div>
 
         <div className="flex gap-2 flex-wrap">
@@ -1682,7 +1691,7 @@ export default function Schedules() {
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground italic">
-                      Nenhum voluntário adicionado
+                      Nenhum voluntario adicionado
                     </p>
                   )}
 
@@ -1893,7 +1902,10 @@ export default function Schedules() {
             <DialogDescription>Crie uma nova escala</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Evento
+            </div>
             <div className="space-y-1">
               <Label>Data</Label>
               <Input
@@ -2018,9 +2030,12 @@ export default function Schedules() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Evento
+            </div>
             {canManageSchedules && (
-              <div className="space-y-3 rounded-md border p-3">
+              <div className="space-y-3 rounded-md border p-4">
                 <div className="space-y-1">
                   <Label>Tipo de evento</Label>
                   <Select
@@ -2040,37 +2055,42 @@ export default function Schedules() {
                   </Select>
                 </div>
 
-                <div className="space-y-1">
-                  <Label>Nome personalizado</Label>
-                  <Input
-                    placeholder="Ex: Reunião Especial"
-                    value={editEventTitle}
-                    onChange={(e) => setEditEventTitle(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Deixe em branco para usar o tipo de evento.
-                  </p>
-                </div>
+                {showCustomEventName && (
+                  <div className="space-y-1">
+                    <Label>Nome personalizado</Label>
+                    <Input
+                      placeholder="Ex: Reuniao Especial"
+                      value={editEventTitle}
+                      onChange={(e) => setEditEventTitle(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Deixe em branco para usar o tipo de evento.
+                    </p>
+                  </div>
+                )}
 
-                <Button
-                  onClick={handleUpdateServiceEvent}
-                  disabled={isSavingEvent}
-                >
-                  Salvar evento
-                </Button>
+                {isEventDirty && (
+                  <Button
+                    onClick={handleUpdateServiceEvent}
+                    disabled={isSavingEvent}
+                  >
+                    Salvar evento
+                  </Button>
+                )}
               </div>
             )}
 
             {!canManageSchedules && (
-              <p className="text-xs text-muted-foreground">
-                Você não tem permissão para editar o evento.
-              </p>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Voce nao tem permissao para editar o evento.
+              </div>
             )}
 
             {/* LISTAGEM ATUAL */}
-            <div className="space-y-4">
+            <div className="space-y-5">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pessoas</div>
               <div className="space-y-2">
-                <Label>Voluntários escalados</Label>
+                <Label>Voluntarios escalados ({selectedAssignments.volunteers.length})</Label>
 
                 {selectedAssignments.volunteers.length > 0 ? (
                   <div className="space-y-2">
@@ -2101,13 +2121,13 @@ export default function Schedules() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
-                    Nenhum voluntário adicionado
+                    Nenhum voluntario adicionado
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label>Pregadores escalados</Label>
+                <Label>Pregadores escalados ({selectedAssignments.preachers.length})</Label>
 
                 {selectedAssignments.preachers.length > 0 ? (
                   <div className="space-y-2">
@@ -2164,27 +2184,27 @@ export default function Schedules() {
               </div>
 
               {!canManagePreaching && (
-                <p className="text-xs text-muted-foreground">
-                  Você não tem permissão para editar pregadores.
-                </p>
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Voce nao tem permissao para editar pregadores.
+                </div>
               )}
             </div>
 
             {!canManageVolunteers && (
-              <p className="text-xs text-muted-foreground">
-                Você não tem permissão para editar voluntários.
-              </p>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Voce nao tem permissao para editar voluntarios.
+              </div>
             )}
 
             {canManageVolunteers && (
               <div className="space-y-2 pt-2 border-t">
-                <Label>Adicionar voluntário</Label>
+                <Label>Adicionar voluntario</Label>
                 <Select
                   value={selectedVolunteerId}
                   onValueChange={setSelectedVolunteerId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione um voluntário" />
+                    <SelectValue placeholder="Selecione um voluntario" />
                   </SelectTrigger>
                   <SelectContent>
                     {volunteers?.map((v) => (
