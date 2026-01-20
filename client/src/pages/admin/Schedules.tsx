@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   useVolunteerProfile,
   useVolunteers,
+  useMinistries,
   useEventTypes,
   useServices,
   usePreachers,
@@ -31,6 +32,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import {
   CalendarDays,
   List,
@@ -42,6 +44,7 @@ import {
   Pencil,
   Check,
   X,
+  FileDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
@@ -72,6 +75,7 @@ import {
   buildAssignmentsPayload,
   normalizeAssignments,
 } from "@/lib/assignments";
+import { getReadableEventColor } from "@/lib/color";
 
 /* =====================================================
    TIPOS LOCAIS
@@ -100,6 +104,7 @@ export default function Schedules() {
 
   const { data: services } = useServices(profile?.organizationId);
   const { data: volunteers } = useVolunteers(profile?.organizationId);
+  const { data: ministries } = useMinistries(profile?.organizationId);
   const { data: preachers } = usePreachers(profile?.organizationId);
   const { data: eventTypes } = useEventTypes(profile?.organizationId);
   const { toast } = useToast();
@@ -138,8 +143,13 @@ export default function Schedules() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
+  const [shouldFocusAssign, setShouldFocusAssign] = useState(false);
   const [isSavingAssign, setIsSavingAssign] = useState(false);
+  const [editEventTypeId, setEditEventTypeId] = useState("");
+  const [editEventTitle, setEditEventTitle] = useState("");
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
   const [preacherSearch, setPreacherSearch] = useState("");
+  const preacherSearchRef = useRef<HTMLInputElement | null>(null);
   const [preacherType, setPreacherType] = useState<
     "interno" | "convidado"
   >("interno");
@@ -265,6 +275,12 @@ export default function Schedules() {
     return <Badge className="bg-slate-100 text-slate-700">Pendente</Badge>;
   };
 
+  const getStatusLabel = (status?: string) => {
+    if (status == "confirmed") return "Confirmado";
+    if (status == "declined") return "Recusado";
+    return "Pendente";
+  };
+
   const myAssignment = (service: Service) =>
     getNormalizedAssignments(service).volunteers.find(
       (a) => a.volunteerId === profile?.id
@@ -273,10 +289,29 @@ export default function Schedules() {
   const isPastService = (service: Service) =>
     isBefore(parseISO(service.date), new Date());
 
-  const openAssignDialog = (service: Service) => {
+  const openAssignDialog = (
+    service: Service,
+    options?: { focusPreacher?: boolean }
+  ) => {
+    const normalizedTitle = service.title?.trim();
+    const directEventType = eventTypes?.find((et) => et.id === service.eventTypeId);
+    const inferredEventType =
+      !service.eventTypeId && normalizedTitle
+        ? eventTypes?.find(
+            (et) => et.name.trim().toLowerCase() === normalizedTitle.toLowerCase()
+          )
+        : undefined;
+    const eventType = directEventType || inferredEventType;
+    const eventTypeName = eventType?.name;
+    const shouldClearTitle =
+      !!eventTypeName && normalizedTitle === eventTypeName.trim();
+
     setSelectedService(service);
     setSelectedVolunteerId("");
     resetPreacherForm();
+    setEditEventTypeId(eventType?.id || "");
+    setEditEventTitle(shouldClearTitle ? "" : service.title || "");
+    setShouldFocusAssign(!!options?.focusPreacher);
     setAssignDialogOpen(true);
   };
 
@@ -323,6 +358,15 @@ export default function Schedules() {
         (p.nameNormalized || normalizeSearch(p.name)) === normalizedPreacherSearch
     );
   }, [normalizedPreacherSearch, preachers]);
+
+  useEffect(() => {
+    if (!assignDialogOpen || !shouldFocusAssign) return;
+    const timer = setTimeout(() => {
+      preacherSearchRef.current?.focus();
+      setShouldFocusAssign(false);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [assignDialogOpen, shouldFocusAssign]);
 
   /* =======================
      FILTROS
@@ -524,10 +568,12 @@ export default function Schedules() {
   const handleCreateService = async () => {
     if (!canManageSchedules || !profile || !newDate) return;
 
-    const title =
-      newCustomName.trim() ||
-      eventTypes?.find((e) => e.id === newEventTypeId)?.name ||
-      "Evento";
+    const hasCustomTitle = !!newCustomName.trim();
+    const title = hasCustomTitle
+      ? newCustomName.trim()
+      : newEventTypeId
+        ? null
+        : "Evento";
 
     setIsSavingCreate(true);
 
@@ -583,7 +629,7 @@ export default function Schedules() {
       });
 
       if (createdService) {
-        openAssignDialog(createdService as Service);
+        openAssignDialog(createdService as Service, { focusPreacher: true });
       }
     } catch (error: any) {
       console.error(error);
@@ -722,6 +768,52 @@ export default function Schedules() {
   };
 
   /* =======================
+     EVENTO (EDIT)
+  ======================= */
+
+  const handleUpdateServiceEvent = async () => {
+    if (!selectedService || !canManageSchedules) return;
+    setIsSavingEvent(true);
+
+    try {
+      const title = editEventTitle.trim();
+      const { error } = await supabase
+        .from("services")
+        .update({
+          title: title ? title : null,
+          event_type_id: editEventTypeId || null,
+        })
+        .eq("id_uuid", selectedService.id_uuid);
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile?.organizationId],
+      });
+
+      setSelectedService({
+        ...selectedService,
+        title: title ? title : null,
+        eventTypeId: editEventTypeId || null,
+      } as Service);
+
+      toast({
+        title: "Evento atualizado",
+        description: "As mudanças foram salvas.",
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao atualizar evento",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingEvent(false);
+    }
+  };
+
+  /* =======================
      PREGADORES (SAFE)
   ======================= */
 
@@ -807,7 +899,7 @@ export default function Schedules() {
     if (!profile) return;
     if (!preacherSearch.trim()) {
       toast({
-        title: "Nome obrigat¢rio",
+        title: "Nome obrigatório",
         description: "Informe o nome do pregador.",
         variant: "destructive",
       });
@@ -859,7 +951,7 @@ export default function Schedules() {
     if (!profile || !preacherToEdit) return;
     if (!editPreacherName.trim()) {
       toast({
-        title: "Nome obrigat¢rio",
+        title: "Nome obrigatório",
         description: "Informe o nome do pregador.",
         variant: "destructive",
       });
@@ -1014,6 +1106,214 @@ export default function Schedules() {
     setDayPickOpen(true);
   };
 
+  const handleExportPeriodPdf = () => {
+    if (!filteredServices || filteredServices.length === 0) {
+      toast({
+        title: "Nada para exportar",
+        description: "Aplique filtros ou escolha um periodo com escalas.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const sortedServices = [...filteredServices].sort(
+      (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+    );
+
+    const rows = sortedServices
+      .map((service) => {
+        const eventType = eventTypes?.find((e) => e.id === service.eventTypeId);
+        const eventTypeName = eventType?.name || "-";
+        const title = getServiceTitle(service);
+        const dateLabel = format(parseISO(service.date), "dd/MM/yyyy");
+
+        const { volunteers: assignments, preachers } = getNormalizedAssignments(service);
+        const preacherNames = preachers
+          .map((p) => getPreacherName(p.preacherId) || p.name)
+          .filter((name) => name && name !== "-")
+          .join(", ");
+
+        const ministryGroups = {} as Record<string, { name: string; status: string }[]>;
+
+        assignments.forEach((assignment) => {
+          const volunteer = volunteers?.find((v) => v.id === assignment.volunteerId);
+          const volunteerName = volunteer?.name || "Voluntario";
+          const statusLabel = getStatusLabel(assignment.status);
+          const ministryId = volunteer?.ministryAssignments?.[0]?.ministryId;
+          const ministryName =
+            ministries?.find((m) => m.id === ministryId)?.name || "Sem ministerio";
+
+          if (!ministryGroups[ministryName]) {
+            ministryGroups[ministryName] = [];
+          }
+
+          ministryGroups[ministryName].push({ name: volunteerName, status: statusLabel });
+        });
+
+        Object.values(ministryGroups).forEach((group) =>
+          group.sort((a, b) => a.name.localeCompare(b.name))
+        );
+
+        const sortedMinistries = Object.keys(ministryGroups).sort((a, b) =>
+          a.localeCompare(b)
+        );
+
+        const volunteerHtml =
+          sortedMinistries.length > 0
+            ? sortedMinistries
+                .map((ministry) => {
+                  const entries = ministryGroups[ministry]
+                    .map((entry) => `<li>${entry.name} (${entry.status})</li>`)
+                    .join("");
+
+                  return `
+                    <div class="ministry-block">
+                      <strong>${ministry}</strong>
+                      <ul>${entries}</ul>
+                    </div>
+                  `;
+                })
+                .join("")
+            : `<span class="empty">Nenhum voluntario escalado.</span>`;
+
+        const preacherHtml = preacherNames
+          ? preacherNames
+          : `<span class="empty">Nenhum pregador definido.</span>`;
+
+        return `
+          <tr>
+            <td>
+              <div class="cell-title">${title}</div>
+              <div class="cell-sub">${dateLabel}</div>
+            </td>
+            <td>${eventTypeName}</td>
+            <td>${preacherHtml}</td>
+            <td>${volunteerHtml}</td>
+          </tr>
+        `;
+      })
+      .join("\n");
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Escalas</title>
+          <style>
+            @page { size: A4 landscape; margin: 16mm; }
+            body { font-family: Arial, sans-serif; color: #0f172a; margin: 0; }
+            h1 { font-size: 18px; margin: 0 0 4px; }
+            .subtitle { font-size: 12px; color: #475569; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 11px; vertical-align: top; }
+            th { background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
+            .cell-title { font-weight: 600; }
+            .cell-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+            .empty { color: #64748b; font-size: 11px; }
+            .ministry-block { margin-bottom: 6px; }
+            .ministry-block strong { display: block; font-size: 11px; color: #1e293b; }
+            ul { margin: 4px 0 0 16px; padding: 0; }
+            li { margin: 0 0 2px; }
+            .footer { margin-top: 16px; font-size: 10px; color: #94a3b8; }
+          </style>
+        </head>
+        <body>
+          <h1>Escalas do periodo</h1>
+          <div class="subtitle">Periodo: ${filterDateFrom ? format(parseISO(filterDateFrom), "dd/MM/yyyy") : "Inicio"} - ${filterDateTo ? format(parseISO(filterDateTo), "dd/MM/yyyy") : "Hoje"} • Total: ${sortedServices.length}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Escala</th>
+                <th>Tipo</th>
+                <th>Pregador</th>
+                <th>Voluntarios</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+          <div class="footer">Gerado pelo Gestor de Escalas</div>
+        </body>
+      </html>
+    `;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      toast({
+        title: "Nao foi possivel gerar o PDF",
+        description: "Tente novamente.",
+        variant: "destructive",
+      });
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    iframe.onload = () => {
+      const contentWindow = iframe.contentWindow;
+      if (!contentWindow) {
+        document.body.removeChild(iframe);
+        toast({
+          title: "Nao foi possivel gerar o PDF",
+          description: "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      let didPrint = false;
+      const fallbackTimer = window.setTimeout(() => {
+        if (didPrint) return;
+        toast({
+          title: "Impressao bloqueada",
+          description: "Clique para abrir o PDF em uma nova aba.",
+          action: (
+            <ToastAction
+              altText="Abrir PDF"
+              onClick={() => {
+                const popup = window.open("", "_blank");
+                if (!popup) return;
+                popup.document.open();
+                popup.document.write(html);
+                popup.document.close();
+              }}
+            >
+              Abrir PDF
+            </ToastAction>
+          ),
+        });
+      }, 1000);
+
+      contentWindow.onbeforeprint = () => {
+        didPrint = true;
+        window.clearTimeout(fallbackTimer);
+      };
+      contentWindow.onafterprint = () => {
+        window.clearTimeout(fallbackTimer);
+        document.body.removeChild(iframe);
+      };
+
+      setTimeout(() => {
+        contentWindow.focus();
+        contentWindow.print();
+      }, 100);
+    };
+  };
+
   const selectedAssignments = getNormalizedAssignments(selectedService);
 
   /* =======================
@@ -1030,9 +1330,19 @@ export default function Schedules() {
             Escalas
           </h1>
           <p className="text-sm text-muted-foreground">Gerencie escalas e confirmações</p>
+          {!canManageSchedules && (
+            <p className="text-xs text-muted-foreground">
+              Você tem acesso somente de leitura.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-2 flex-wrap">
+          {viewMode === "list" && (
+            <Button variant="outline" onClick={handleExportPeriodPdf}>
+              <FileDown className="w-4 h-4 mr-2" /> Exportar PDF
+            </Button>
+          )}
           <Button
             variant={viewMode === "list" ? "default" : "outline"}
             onClick={() => setViewMode("list")}
@@ -1180,18 +1490,46 @@ export default function Schedules() {
 
       {/* View Mode Toggle */}
       {viewMode === "list" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredServices.map((service) => {
-            const my = myAssignment(service);
-            const { volunteers: assignments, preachers: preacherAssignments } =
-              getNormalizedAssignments(service);
+        filteredServices.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-10 text-center space-y-3">
+              <p className="font-medium">Nenhuma escala encontrada</p>
+              <p className="text-sm text-muted-foreground">
+                Crie uma escala para começar a organizar os eventos.
+              </p>
+              {canManageSchedules && (
+                <Button onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Criar escala
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredServices.map((service) => {
+              const my = myAssignment(service);
+              const { volunteers: assignments, preachers: preacherAssignments } =
+                getNormalizedAssignments(service);
 
-            return (
-              <Card key={service.id_uuid}>
+              return (
+                <Card key={service.id_uuid}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <CardTitle className="text-base">{getServiceTitle(service)}</CardTitle>
+                                            {(() => {
+                        const eventType = eventTypes?.find((type) => type.id === service.eventTypeId);
+                        const readableEventColor = getReadableEventColor(eventType?.color);
+                        return (
+                          <CardTitle
+                            className="text-base"
+                            style={readableEventColor ? { color: readableEventColor } : undefined}
+                          >
+                            {getServiceTitle(service)}
+                          </CardTitle>
+                        );
+                      })()}
+
                       <p className="text-sm text-muted-foreground">
                         {format(parseISO(service.date), "dd/MM/yyyy")}
                       </p>
@@ -1292,9 +1630,10 @@ export default function Schedules() {
                   )}
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
       )}
 
       {viewMode === "calendar" && (
@@ -1323,54 +1662,118 @@ export default function Schedules() {
 
           <div className="grid grid-cols-7 bg-slate-100 border-b">
             {Array.from({ length: 7 }).map((_, idx) => {
-              const label = format(addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), idx), "EEE", {
-                locale: ptBR,
-              });
+              const baseDate = addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), idx);
+              const labelShort = format(baseDate, "EEEEE", { locale: ptBR });
+              const labelLong = format(baseDate, "EEE", { locale: ptBR });
               return (
-                <div key={`weekday-${idx}`} className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {label}
+                <div
+                  key={`weekday-${idx}`}
+                  className="px-1 sm:px-2 py-1 text-[10px] sm:text-[11px] uppercase tracking-wide text-muted-foreground text-center"
+                >
+                  <span className="sm:hidden">{labelShort}</span>
+                  <span className="hidden sm:inline">{labelLong}</span>
                 </div>
               );
             })}
           </div>
 
           <div className="grid grid-cols-7">
-            {calendarDays.map((day, idx) => (
-              <div
-                key={idx}
-                className={`border p-2 min-h-[100px] ${
-                  !isSameMonth(day, calendarMonth) ? "bg-slate-50" : ""
-                } ${canManageSchedules ? "cursor-pointer hover:bg-slate-50" : ""}`}
-                onClick={() => handleDayClick(day)}
-              >
-                <div className="text-xs text-right">{format(day, "d")}</div>
+            {calendarDays.map((day, idx) => {
+              const dayServices = servicesForDay(day);
+              const hasSchedules = dayServices.length > 0;
+              const maxVisible = 3;
+              const visible = dayServices.slice(0, maxVisible);
+              const hiddenCount = dayServices.length - visible.length;
 
-                {servicesForDay(day).map((s) => (
-                  (() => {
+              return (
+                <div
+                  key={idx}
+                  className={`border p-1 sm:p-2 min-h-[72px] sm:min-h-[100px] ${
+                    !isSameMonth(day, calendarMonth) ? "bg-slate-50" : ""
+                  } ${hasSchedules ? "bg-emerald-50/40" : ""} ${
+                    isSameDay(day, new Date()) ? "ring-1 ring-primary/40 bg-primary/5" : ""
+                  } ${canManageSchedules ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                  onClick={() => handleDayClick(day)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] sm:text-xs text-right">
+                      {format(day, "d")}
+                    </div>
+                    {hasSchedules && (
+                      <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {dayServices.length}
+                      </span>
+                    )}
+                  </div>
+
+                  {visible.map((s) => {
                     const { preachers } = getNormalizedAssignments(s);
                     const preacherNames = preachers
                       .map((p) => getPreacherName(p.preacherId) || p.name)
                       .filter((name) => name && name !== "-")
                       .join(", ");
+                    const eventType = eventTypes?.find((e) => e.id === s.eventTypeId);
+                    const serviceTitle = getServiceTitle(s);
+                    const eventTypeName = eventType?.name;
+                    const readableEventColor = getReadableEventColor(eventType?.color);
+                    const showEventType =
+                      !!eventTypeName && eventTypeName !== serviceTitle;
+                    const eventStyle = eventType?.color
+                      ? {
+                          borderLeftColor: eventType.color,
+                          backgroundColor: `${eventType.color}1A`,
+                        }
+                      : undefined;
 
                     return (
-                  <div
-                    key={s.id_uuid}
-                    className="text-xs bg-primary/10 rounded p-1 mt-1 truncate"
-                    title={getServiceTitle(s)}
-                  >
-                    {getServiceTitle(s)}
-                    {preachers.length > 0 && (
-                      <span className="block text-[10px] text-muted-foreground truncate">
-                        Pregador: {preacherNames || "Definido"}
-                      </span>
-                    )}
-                  </div>
+                      <div
+                        key={s.id_uuid}
+                        className="group relative text-[10px] sm:text-xs rounded px-1 py-0.5 mt-1 truncate border-l-2"
+                        style={eventStyle}
+                        title={getServiceTitle(s)}
+                      >
+                        {canDeleteService(s) && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="absolute right-0 top-0 h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDeleteService(s);
+                            }}
+                            title="Excluir escala"
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        )}
+                        <span
+                          className="block truncate"
+                          style={readableEventColor ? { color: readableEventColor } : undefined}
+                        >
+                          {serviceTitle}
+                        </span>
+                        {showEventType && (
+                          <span className="block text-[9px] sm:text-[10px] text-muted-foreground truncate">
+                            Tipo: {eventTypeName}
+                          </span>
+                        )}
+                        {preachers.length > 0 && (
+                          <span className="block text-[9px] sm:text-[10px] text-muted-foreground truncate">
+                            Pregador: {preacherNames || "Definido"}
+                          </span>
+                        )}
+                      </div>
                     );
-                  })()
-                ))}
-              </div>
-            ))}
+                  })}
+
+                  {hiddenCount > 0 && (
+                    <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                      +{hiddenCount} escala{hiddenCount > 1 ? "s" : ""}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1492,11 +1895,71 @@ export default function Schedules() {
           <DialogHeader>
             <DialogTitle>Gerenciar escala</DialogTitle>
             <DialogDescription>
-              {selectedService ? getServiceTitle(selectedService) : ""}
+              {selectedService && (() => {
+                const eventType = eventTypes?.find(
+                  (type) => type.id === selectedService.eventTypeId
+                );
+                const readableEventColor = getReadableEventColor(eventType?.color);
+                return (
+                  <span
+                    style={readableEventColor ? { color: readableEventColor } : undefined}
+                  >
+                    {getServiceTitle(selectedService)}
+                  </span>
+                );
+              })()}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            {canManageSchedules && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1">
+                  <Label>Tipo de evento</Label>
+                  <Select
+                    value={editEventTypeId}
+                    onValueChange={setEditEventTypeId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eventTypes?.map((et) => (
+                        <SelectItem key={et.id} value={et.id}>
+                          {et.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label>Nome personalizado</Label>
+                  <Input
+                    placeholder="Ex: Reunião Especial"
+                    value={editEventTitle}
+                    onChange={(e) => setEditEventTitle(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Deixe em branco para usar o tipo de evento.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleUpdateServiceEvent}
+                  disabled={isSavingEvent}
+                >
+                  Salvar evento
+                </Button>
+              </div>
+            )}
+
+            {!canManageSchedules && (
+              <p className="text-xs text-muted-foreground">
+                Você não tem permissão para editar o evento.
+              </p>
+            )}
+
             {/* LISTAGEM ATUAL */}
             <div className="space-y-4">
               <div className="space-y-2">
@@ -1600,6 +2063,12 @@ export default function Schedules() {
               )}
             </div>
 
+            {!canManageVolunteers && (
+              <p className="text-xs text-muted-foreground">
+                Você não tem permissão para editar voluntários.
+              </p>
+            )}
+
             {canManageVolunteers && (
               <div className="space-y-2 pt-2 border-t">
                 <Label>Adicionar voluntário</Label>
@@ -1634,6 +2103,7 @@ export default function Schedules() {
                 <Label>Adicionar pregador</Label>
                 <Input
                   placeholder="Buscar ou cadastrar pregador"
+                  ref={preacherSearchRef}
                   value={preacherSearch}
                   onChange={(e) => setPreacherSearch(e.target.value)}
                 />
@@ -1807,7 +2277,18 @@ export default function Schedules() {
                 className="flex items-center justify-between gap-2 rounded-md border p-2"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{getServiceTitle(service)}</p>
+                  {(() => {
+                    const eventType = eventTypes?.find((type) => type.id === service.eventTypeId);
+                    const readableEventColor = getReadableEventColor(eventType?.color);
+                    return (
+                      <p
+                        className="text-sm font-medium truncate"
+                        style={readableEventColor ? { color: readableEventColor } : undefined}
+                      >
+                        {getServiceTitle(service)}
+                      </p>
+                    );
+                  })()}
                   <p className="text-xs text-muted-foreground">
                     {format(parseISO(service.date), "dd/MM/yyyy")}
                   </p>

@@ -73,7 +73,12 @@ export function useServices(organizationId: string | null | undefined) {
         .order("date", { ascending: true });
 
       if (error) throw error;
-      return data as Service[];
+      return (data || []).map((service: any) => ({
+        ...service,
+        organizationId: service.organization_id ?? service.organizationId,
+        eventTypeId: service.event_type_id ?? service.eventTypeId,
+        createdAt: service.created_at ?? service.createdAt,
+      })) as Service[];
     },
     enabled: !!organizationId,
   });
@@ -94,7 +99,12 @@ export function useMySchedules(volunteerId: string | null | undefined, organizat
 
       if (error) throw error;
       
-      const services = data as Service[];
+      const services = (data || []).map((service: any) => ({
+        ...service,
+        organizationId: service.organization_id ?? service.organizationId,
+        eventTypeId: service.event_type_id ?? service.eventTypeId,
+        createdAt: service.created_at ?? service.createdAt,
+      })) as Service[];
       
       return services.filter((service) => {
         const { volunteers } = normalizeAssignments(service.assignments);
@@ -320,6 +330,35 @@ export function useCreateEventType() {
     },
   });
 }
+
+export function useUpdateEventType() {
+  return useMutation({
+    mutationFn: async (eventType: {
+      id: string;
+      name: string;
+      color?: string;
+      organizationId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("event_types")
+        .update({
+          name: eventType.name,
+          color: eventType.color || null,
+        })
+        .eq("id", eventType.id)
+        .eq("organization_id", eventType.organizationId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event_types"] });
+    },
+  });
+}
+
 
 export function useCreateTeam() {
   return useMutation({

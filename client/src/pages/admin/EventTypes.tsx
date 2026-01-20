@@ -1,70 +1,203 @@
 import { useState } from "react";
-import { useVolunteerProfile, useEventTypes, useCreateEventType } from "@/hooks/use-data";
+import { useVolunteerProfile, useEventTypes, useCreateEventType, useUpdateEventType } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Plus, Loader2 } from "lucide-react";
+import { Calendar, Plus, Loader2, Pencil } from "lucide-react";
 
-const colorOptions = [
-  { value: "#3b82f6", label: "Azul" },
-  { value: "#10b981", label: "Verde" },
-  { value: "#f59e0b", label: "Amarelo" },
-  { value: "#ef4444", label: "Vermelho" },
-  { value: "#8b5cf6", label: "Roxo" },
-  { value: "#ec4899", label: "Rosa" },
-  { value: "#06b6d4", label: "Ciano" },
-  { value: "#f97316", label: "Laranja" },
+const colorFamilies = [
+  {
+    label: "Azuis",
+    options: [
+      { value: "#3b82f6", label: "Azul" },
+      { value: "#0ea5e9", label: "Azul claro" },
+      { value: "#1d4ed8", label: "Azul escuro" },
+    ],
+  },
+  {
+    label: "Verdes",
+    options: [
+      { value: "#22c55e", label: "Verde" },
+      { value: "#10b981", label: "Verde água" },
+      { value: "#14b8a6", label: "Turquesa" },
+      { value: "#84cc16", label: "Lima" },
+    ],
+  },
+  {
+    label: "Quentes",
+    options: [
+      { value: "#f59e0b", label: "Amarelo" },
+      { value: "#f97316", label: "Laranja" },
+      { value: "#ef4444", label: "Vermelho" },
+      { value: "#e11d48", label: "Rosa escuro" },
+      { value: "#ec4899", label: "Rosa" },
+    ],
+  },
+  {
+    label: "Neutros",
+    options: [
+      { value: "#64748b", label: "Cinza" },
+      { value: "#0f172a", label: "Grafite" },
+    ],
+  },
+  {
+    label: "Roxos",
+    options: [
+      { value: "#8b5cf6", label: "Roxo" },
+      { value: "#7c3aed", label: "Violeta" },
+    ],
+  },
+  {
+    label: "Cianos",
+    options: [
+      { value: "#06b6d4", label: "Ciano" },
+    ],
+  },
 ];
 
+const colorOptions = colorFamilies.flatMap((family) => family.options);
 export default function EventTypes() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: eventTypes, isLoading } = useEventTypes(profile?.organizationId);
   const createEventType = useCreateEventType();
+  const updateEventType = useUpdateEventType();
   const { toast } = useToast();
   
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingEventTypeId, setEditingEventTypeId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     color: "#3b82f6",
   });
+  const [customColor, setCustomColor] = useState("");
 
-  const canSubmit = !!profile?.organizationId && !createEventType.isPending;
+  const isSaving = createEventType.isPending || updateEventType.isPending;
+  const canSubmit = !!profile?.organizationId && !isSaving;
+
+  const normalizeName = (value: string) => value.trim().toLowerCase();
+  const normalizeHex = (value: string) => {
+    const raw = value.trim();
+    if (!raw) return "";
+    const withoutHash = raw.replace(/^#/, "");
+    if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) return "";
+    return `#${withoutHash.toLowerCase()}`;
+  };
+  const isPresetColor = (value: string) =>
+    !!colorOptions.find((option) => option.value === value);
+  const resolvedCustomColor =
+    normalizeHex(customColor) || (!isPresetColor(formData.color) ? formData.color : "");
+
+  const openCreateDialog = () => {
+    setFormMode("create");
+    setEditingEventTypeId(null);
+    setFormData({ name: "", color: "#3b82f6" });
+    setCustomColor("");
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (eventType: { id: string; name: string; color?: string | null }) => {
+    const colorValue = eventType.color || "#3b82f6";
+    setFormMode("edit");
+    setEditingEventTypeId(eventType.id);
+    setFormData({
+      name: eventType.name,
+      color: colorValue,
+    });
+    setCustomColor(isPresetColor(colorValue) ? "" : colorValue);
+    setDialogOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!profile?.organizationId) return;
-    if (!formData.name.trim()) {
+
+    const normalizedName = normalizeName(formData.name);
+    if (!normalizedName) {
       toast({
-        title: "Campo obrigatório",
-        description: "O nome é obrigatório.",
+        title: "Campo obrigatorio",
+        description: "O nome eh obrigatorio.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const normalizedColor = normalizeHex(formData.color) || formData.color;
+    if (!normalizedColor) {
+      toast({
+        title: "Cor invalida",
+        description: "Informe uma cor valida no formato #RRGGBB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const nameConflict = eventTypes?.some((et) => {
+      if (editingEventTypeId && et.id === editingEventTypeId) return false;
+      return normalizeName(et.name) === normalizedName;
+    });
+
+    if (nameConflict) {
+      toast({
+        title: "Nome ja utilizado",
+        description: "Escolha um nome diferente para o tipo de evento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const colorConflict = eventTypes?.some((et) => {
+      if (editingEventTypeId && et.id === editingEventTypeId) return false;
+      return et.color === normalizedColor;
+    });
+
+    if (colorConflict) {
+      toast({
+        title: "Cor ja utilizada",
+        description: "Escolha outra cor para diferenciar os tipos de evento.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      await createEventType.mutateAsync({
-        name: formData.name.trim(),
-        color: formData.color,
-        organizationId: profile.organizationId,
-      });
+      if (formMode === "edit" && editingEventTypeId) {
+        await updateEventType.mutateAsync({
+          id: editingEventTypeId,
+          name: formData.name.trim(),
+          color: normalizedColor,
+          organizationId: profile.organizationId,
+        });
+      } else {
+        await createEventType.mutateAsync({
+          name: formData.name.trim(),
+          color: normalizedColor,
+          organizationId: profile.organizationId,
+        });
+      }
 
       toast({
         title: "Sucesso",
-        description: "Tipo de evento cadastrado com sucesso!",
+        description:
+          formMode === "edit"
+            ? "Tipo de evento atualizado com sucesso!"
+            : "Tipo de evento cadastrado com sucesso!",
       });
 
       setFormData({ name: "", color: "#3b82f6" });
+      setCustomColor("");
       setDialogOpen(false);
+      setEditingEventTypeId(null);
+      setFormMode("create");
     } catch (error: any) {
       toast({
-        title: "Erro ao cadastrar",
+        title: formMode === "edit" ? "Erro ao atualizar" : "Erro ao cadastrar",
         description: error.message || "Tente novamente.",
         variant: "destructive",
       });
@@ -88,7 +221,7 @@ export default function EventTypes() {
             {eventTypes?.length || 0} tipos
           </Badge>
           <Button 
-            onClick={() => setDialogOpen(true)} 
+            onClick={openCreateDialog} 
             disabled={profileLoading || !profile?.organizationId}
             data-testid="button-add-event-type"
           >
@@ -109,34 +242,45 @@ export default function EventTypes() {
           {eventTypes.map((eventType) => (
             <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`}>
               <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ 
-                      backgroundColor: eventType.color ? `${eventType.color}20` : 'hsl(var(--primary) / 0.1)',
-                    }}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                      style={{ 
+                        backgroundColor: eventType.color ? `${eventType.color}20` : 'hsl(var(--primary) / 0.1)',
+                      }}
+                    >
+                      <Calendar 
+                        className="w-5 h-5" 
+                        style={{ color: eventType.color || 'hsl(var(--primary))' }}
+                      />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{eventType.name}</CardTitle>
+                      {eventType.color && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: eventType.color }}
+                            title={eventType.color}
+                            aria-label={`Cor: ${colorOptions.find(c => c.value === eventType.color)?.label || eventType.color}`}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {colorOptions.find(c => c.value === eventType.color)?.label || "Personalizado"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => openEditDialog(eventType)}
+                    title="Editar tipo"
                   >
-                    <Calendar 
-                      className="w-5 h-5" 
-                      style={{ color: eventType.color || 'hsl(var(--primary))' }}
-                    />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">{eventType.name}</CardTitle>
-                    {eventType.color && (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: eventType.color }}
-                          title={eventType.color}
-                          aria-label={`Cor: ${colorOptions.find(c => c.value === eventType.color)?.label || eventType.color}`}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {colorOptions.find(c => c.value === eventType.color)?.label || "Personalizado"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                 </div>
               </CardHeader>
             </Card>
@@ -157,7 +301,7 @@ export default function EventTypes() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo Tipo de Evento</DialogTitle>
+            <DialogTitle>{formMode === "edit" ? "Editar Tipo de Evento" : "Novo Tipo de Evento"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -180,32 +324,85 @@ export default function EventTypes() {
                   <SelectValue placeholder="Selecione uma cor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {colorOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
+                  {resolvedCustomColor && !isPresetColor(resolvedCustomColor) && (
+                    <SelectItem value={resolvedCustomColor}>
                       <div className="flex items-center gap-2">
-                        <div 
-                          className="w-4 h-4 rounded-full" 
-                          style={{ backgroundColor: option.value }}
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: resolvedCustomColor }}
                         />
-                        {option.label}
+                        Personalizada ({resolvedCustomColor})
                       </div>
                     </SelectItem>
+                  )}
+                  {colorFamilies.map((family) => (
+                    <SelectGroup key={family.label}>
+                      <SelectLabel>{family.label}</SelectLabel>
+                      {family.options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: option.value }}
+                            />
+                            {option.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="customColor">Cor personalizada (hex)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="customColor"
+                  value={customColor}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCustomColor(value);
+                    const normalized = normalizeHex(value);
+                    if (normalized) {
+                      setFormData({ ...formData, color: normalized });
+                    }
+                  }}
+                  placeholder="#1f2937"
+                />
+                <input
+                  type="color"
+                  aria-label="Selecionar cor personalizada"
+                  className="h-9 w-9 rounded-md border border-input bg-background p-1"
+                  value={resolvedCustomColor || "#000000"}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCustomColor(value);
+                    setFormData({ ...formData, color: value });
+                  }}
+                />
+                <div
+                  className="w-8 h-8 rounded-md border"
+                  style={{ backgroundColor: resolvedCustomColor || "transparent" }}
+                  title={resolvedCustomColor || "Sem cor"}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Use o formato #RRGGBB. Se valido, ele sera aplicado automaticamente.
+              </p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={!canSubmit} data-testid="button-submit-event-type">
-                {createEventType.isPending ? (
+                {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Salvando...
                   </>
                 ) : (
-                  "Salvar"
+                  formMode === "edit" ? "Salvar alteracoes" : "Salvar"
                 )}
               </Button>
             </DialogFooter>

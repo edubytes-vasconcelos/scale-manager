@@ -4,6 +4,7 @@ import {
   useServices,
   useMySchedules,
   useUpdateAssignmentStatus,
+  useEventTypes,
 } from "@/hooks/use-data";
 import { ServiceCard } from "@/components/ServiceCard";
 import {
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const { data: services, isLoading: loadingServices } = useServices(
     volunteer?.organizationId
   );
+  const { data: eventTypes } = useEventTypes(volunteer?.organizationId);
   const { data: mySchedules, isLoading: loadingMySchedules } =
     useMySchedules(volunteer?.id, volunteer?.organizationId);
   const updateStatus = useUpdateAssignmentStatus();
@@ -370,12 +372,21 @@ export default function Dashboard() {
           ) : futureServices.length > 0 ? (
             <div className="grid md:grid-cols-2 gap-6">
               {futureServices.map((service) => (
+                (() => {
+                  const eventType = eventTypes?.find(
+                    (type) => type.id === service.eventTypeId
+                  );
+                  return (
                 <ServiceCard
                   key={service.id}
                   service={service}
                   volunteerId={volunteer?.id}
                   showActions={false}
+                  eventTypeName={eventType?.name}
+                  eventTypeColor={eventType?.color}
                 />
+                  );
+                })()
               ))}
             </div>
           ) : (

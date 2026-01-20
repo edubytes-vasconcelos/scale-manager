@@ -1,5 +1,6 @@
 import { Service } from "@shared/schema"
 import { normalizeAssignments } from "@/lib/assignments"
+import { getReadableEventColor } from "@/lib/color"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import {
@@ -17,6 +18,8 @@ interface ServiceCardProps {
   service: Service
   volunteerId?: string | null
   showActions?: boolean
+  eventTypeName?: string | null
+  eventTypeColor?: string | null
 
   /** callbacks opcionais (não quebram quem não usar) */
   onConfirm?: (serviceId: string) => void
@@ -27,6 +30,8 @@ export function ServiceCard({
   service,
   volunteerId,
   showActions = true,
+  eventTypeName,
+  eventTypeColor,
   onConfirm,
   onDecline,
 }: ServiceCardProps) {
@@ -35,12 +40,17 @@ export function ServiceCard({
     locale: ptBR,
   })
 
-  const { volunteers } = normalizeAssignments(service.assignments)
+  const { volunteers, preachers } = normalizeAssignments(service.assignments)
   const myAssignment = volunteerId
     ? volunteers.find((a: any) => a.volunteerId === volunteerId)
     : null
 
   const totalVolunteers = volunteers.length
+  const readableEventColor = getReadableEventColor(eventTypeColor)
+  const preacherNames = preachers
+    .map((p) => p.name)
+    .filter((name) => name && name !== "-")
+    .join(", ")
 
   const renderStatus = () => {
     if (!myAssignment) {
@@ -118,19 +128,30 @@ export function ServiceCard({
             {formattedDate}
           </div>
 
-          <h3 className="text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-primary">
+          <h3
+            className="text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-primary"
+            style={readableEventColor ? { color: readableEventColor } : undefined}
+          >
             {service.title}
           </h3>
         </div>
 
         {/* INFO + STATUS */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>
-              {totalVolunteers} voluntário
-              {totalVolunteers !== 1 ? "s" : ""}
-            </span>
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <span>
+                {totalVolunteers} voluntário
+                {totalVolunteers !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {preachers.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                Pregador: {preacherNames || "Definido"}
+              </div>
+            )}
           </div>
 
           {renderStatus()}

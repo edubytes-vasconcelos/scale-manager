@@ -45,7 +45,7 @@ export function useAuthForm() {
 
       if (!name.trim()) {
         toast({
-          title: "Nome obrigat¢rio",
+          title: "Nome obrigatório",
           description: "Por favor, informe seu nome completo.",
           variant: "destructive",
         });
@@ -81,7 +81,7 @@ export function useAuthForm() {
       } catch (error: any) {
         toast({
           title: "Erro no cadastro",
-          description: error.message || "NÆo foi poss¡vel criar sua conta.",
+          description: error.message || "Não foi possível criar sua conta.",
           variant: "destructive",
         });
       } finally {
@@ -100,7 +100,7 @@ export function useAuthForm() {
     } catch (error: any) {
       toast({
         title: "Erro ao entrar com Google",
-        description: error.message || "NÆo foi poss¡vel conectar com o Google.",
+        description: error.message || "Não foi possível conectar com o Google.",
         variant: "destructive",
       });
     } finally {

@@ -70,6 +70,25 @@ function renderMinistryIcon(icon: unknown) {
   return icon;
 }
 
+const accessLevelLabels: Record<string, string> = {
+  admin: "Admin",
+  leader: "Líder",
+  volunteer: "Voluntário",
+};
+
+const accessLevelClasses: Record<string, string> = {
+  admin: "bg-emerald-100 text-emerald-800",
+  leader: "bg-sky-100 text-sky-800",
+  volunteer: "bg-slate-100 text-slate-700",
+};
+
+function getAccessLevelBadge(accessLevel?: string) {
+  const label = accessLevelLabels[accessLevel || "volunteer"] || "Voluntário";
+  const className =
+    accessLevelClasses[accessLevel || "volunteer"] || "bg-slate-100 text-slate-700";
+  return { label, className };
+}
+
 /* =========================================================
    Volunteers Page
 ========================================================= */
@@ -92,6 +111,7 @@ export default function Volunteers() {
       .map((m) => m.ministryId) || [];
 
   const isLeader = leaderMinistryIds.length > 0;
+  const canManageVolunteerRecords = isAdmin || isLeader;
 
   const availableMinistries = isAdmin
     ? ministries
@@ -293,7 +313,7 @@ export default function Volunteers() {
           <Users className="w-6 h-6" /> Voluntários
         </h1>
 
-        {(isAdmin || isLeader) && (
+        {canManageVolunteerRecords && (
           <Button onClick={openAddForm}>
             <Plus className="w-4 h-4 mr-2" />
             Adicionar
@@ -301,18 +321,41 @@ export default function Volunteers() {
         )}
       </div>
 
+      {!canManageVolunteerRecords && (
+        <p className="text-xs text-muted-foreground">
+          Você tem acesso somente de leitura.
+        </p>
+      )}
+
       {isLoading && (
         <div className="flex justify-center py-10">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {visibleVolunteers?.map((v) => {
+      {!isLoading && (!visibleVolunteers || visibleVolunteers.length === 0) ? (
+        <Card className="border-dashed">
+          <CardContent className="py-8 text-center space-y-3">
+            <p className="font-medium">Nenhum voluntário cadastrado</p>
+            <p className="text-sm text-muted-foreground">
+              Cadastre o primeiro voluntário para começar a montar as escalas.
+            </p>
+            {canManageVolunteerRecords && (
+              <Button onClick={openAddForm}>
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar voluntário
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {visibleVolunteers?.map((v) => {
           const isActive = !!v.authUserId;
           const isVolunteerLeader = v.ministryAssignments?.some(
             (a) => a.isLeader
           );
+          const accessBadge = getAccessLevelBadge(v.accessLevel);
 
           return (
             <Card
@@ -347,19 +390,21 @@ export default function Volunteers() {
                 </div>
 
                 <div className="flex gap-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
-                        onClick={() => openEditForm(v)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Editar</TooltipContent>
-                  </Tooltip>
+                  {canManageVolunteerRecords && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                          onClick={() => openEditForm(v)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Editar</TooltipContent>
+                    </Tooltip>
+                  )}
 
                   {canDeleteVolunteer(v) && (
                     <Tooltip>
@@ -384,9 +429,9 @@ export default function Volunteers() {
 
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Badge variant="secondary">
+                  <Badge className={accessBadge.className}>
                     <UserCheck className="w-3 h-3 mr-1" />
-                    Voluntário
+                    {accessBadge.label}
                   </Badge>
 
                   <Badge
@@ -411,9 +456,17 @@ export default function Volunteers() {
                 </div>
 
                 {v.canManagePreachingSchedule && (
-                  <Badge className="bg-indigo-100 text-indigo-800">
-                    Gerencia prega‡Æo
-                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge className="bg-indigo-100 text-indigo-800">
+                        Gerencia pregação
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Permite cadastrar e editar pregadores, além de montar escalas
+                      de pregação.
+                    </TooltipContent>
+                  </Tooltip>
                 )}
 
                 <div className="flex flex-wrap gap-1">
@@ -442,7 +495,8 @@ export default function Volunteers() {
             </Card>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* DELETE */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -534,7 +588,8 @@ export default function Volunteers() {
                     Pode gerenciar escala de pregadores
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Permite cadastrar e editar pregadores, al‚m de montar escalas de prega‡Æo.
+                    Permite cadastrar e editar pregadores, além de montar escalas
+                    de pregação.
                   </p>
                 </div>
               </div>

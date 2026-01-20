@@ -47,7 +47,7 @@ export default function Login() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-6">
               <img
                 src="/brand/logo-256.png"
-                alt="Logo – Gestor IASD"
+                alt="Logo - Gestor IASD"
                 className="w-10 h-10"
                 draggable={false}
               />
@@ -56,7 +56,7 @@ export default function Login() {
               {isSignUp ? "Criar Conta" : "Área de Membros"}
             </h1>
             <p className="text-muted-foreground text-sm">
-              Gestor de Escalas – IASD Bosque
+              Gestor de Escalas - IASD Bosque
             </p>
           </div>
 
@@ -100,11 +100,16 @@ export default function Login() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="********"
                 data-testid="input-password"
               />
               {isSignUp && (
                 <p className="text-xs text-muted-foreground ml-1">Mínimo de 6 caracteres</p>
+              )}
+              {!isSignUp && (
+                <p className="text-xs text-muted-foreground ml-1">
+                  Mínimo de 6 caracteres
+                </p>
               )}
             </div>
 
@@ -158,7 +163,7 @@ export default function Login() {
               className="text-sm text-primary font-medium hover:underline"
               data-testid="toggle-auth-mode"
             >
-              {isSignUp ? "Já tenho uma conta" : "Não tenho conta – Cadastrar"}
+              {isSignUp ? "Já tenho uma conta" : "Não tenho conta - Cadastrar"}
             </button>
             
             {!isSignUp && (
