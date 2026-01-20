@@ -47,6 +47,8 @@ export function ServiceCard({
 
   const totalVolunteers = volunteers.length
   const readableEventColor = getReadableEventColor(eventTypeColor)
+  const displayTitle = service.title?.trim() || eventTypeName || formattedDate
+  const showEventType = !!eventTypeName && eventTypeName !== displayTitle
   const preacherNames = preachers
     .map((p) => p.name)
     .filter((name) => name && name !== "-")
@@ -132,8 +134,19 @@ export function ServiceCard({
             className="text-xl font-bold tracking-tight text-foreground transition-colors group-hover:text-primary"
             style={readableEventColor ? { color: readableEventColor } : undefined}
           >
-            {service.title}
+            {displayTitle}
           </h3>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {showEventType && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: eventTypeColor || "#94a3b8" }}
+                />
+                {eventTypeName}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* INFO + STATUS */}

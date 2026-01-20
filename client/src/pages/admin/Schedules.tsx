@@ -164,6 +164,10 @@ export default function Schedules() {
   >("interno");
   const [editPreacherChurch, setEditPreacherChurch] = useState("");
   const [editPreacherNotes, setEditPreacherNotes] = useState("");
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [conflictDetails, setConflictDetails] = useState<
+    { volunteerId: string; volunteerName: string; services: string[] }[]
+  >([]);
 
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [dayPickOpen, setDayPickOpen] = useState(false);
@@ -313,6 +317,59 @@ export default function Schedules() {
     setEditEventTitle(shouldClearTitle ? "" : service.title || "");
     setShouldFocusAssign(!!options?.focusPreacher);
     setAssignDialogOpen(true);
+
+    if (services?.length) {
+      const currentAssignments = getNormalizedAssignments(service).volunteers;
+      const otherSameDay = services.filter(
+        (s) => s.id_uuid !== service.id_uuid && s.date === service.date
+      );
+      if (currentAssignments.length > 0 && otherSameDay.length > 0) {
+        const conflictsByVolunteer = new Map<string, Set<string>>();
+
+        currentAssignments.forEach((assignment) => {
+          if (!assignment.volunteerId) return;
+          otherSameDay.forEach((other) => {
+            const hasConflict = getNormalizedAssignments(other).volunteers.some(
+              (a) => a.volunteerId === assignment.volunteerId
+            );
+            if (!hasConflict) return;
+            const key = assignment.volunteerId;
+            const titles = conflictsByVolunteer.get(key) || new Set<string>();
+            titles.add(getServiceTitle(other));
+            conflictsByVolunteer.set(key, titles);
+          });
+        });
+
+        if (conflictsByVolunteer.size > 0) {
+          const details = Array.from(conflictsByVolunteer.entries()).map(
+            ([volunteerId, titles]) => ({
+              volunteerId,
+              volunteerName: getVolunteerName(volunteerId),
+              services: Array.from(titles),
+            })
+          );
+          setConflictDetails(details);
+          setConflictDialogOpen(true);
+
+          const entries = Array.from(conflictsByVolunteer.entries());
+          const preview = entries
+            .slice(0, 3)
+            .map(([volunteerId, titles]) => {
+              const volunteerName = getVolunteerName(volunteerId);
+              const titleList = Array.from(titles).slice(0, 2).join(", ");
+              return `${volunteerName}: ${titleList}`;
+            })
+            .join(" • ");
+          const suffix =
+            entries.length > 3 ? ` e mais ${entries.length - 3} conflito(s)` : "";
+
+          toast({
+            title: "Conflitos de escala no mesmo dia",
+            description: `${preview}${suffix}.`,
+          });
+        }
+      }
+    }
   };
 
   const openDeclineDialog = (service: Service) => {
@@ -687,12 +744,50 @@ export default function Schedules() {
     );
   };
 
-  const handleAddVolunteer = async () => {
+  const handleAddVolunteer = async (force = false) => {
     if (!selectedService || !selectedVolunteerId) return;
     if (!canManageVolunteers) return;
     setIsSavingAssign(true);
 
     try {
+      if (!force && services?.length) {
+        const conflicts = services.filter((service) => {
+          if (service.id_uuid === selectedService.id_uuid) return false;
+          if (service.date !== selectedService.date) return false;
+          return getNormalizedAssignments(service).volunteers.some(
+            (assignment) => assignment.volunteerId === selectedVolunteerId
+          );
+        });
+
+        if (conflicts.length > 0) {
+          const preview = conflicts
+            .slice(0, 2)
+            .map(
+              (service) =>
+                `${format(parseISO(service.date), "dd/MM")} - ${getServiceTitle(service)}`
+            )
+            .join("; ");
+          const suffix =
+            conflicts.length > 2
+              ? ` e mais ${conflicts.length - 2} conflito(s)`
+              : "";
+
+          toast({
+            title: "Conflito de escala no mesmo dia",
+            description: `${preview}${suffix}.`,
+            action: (
+              <ToastAction
+                altText="Adicionar mesmo assim"
+                onClick={() => handleAddVolunteer(true)}
+              >
+                Adicionar mesmo assim
+              </ToastAction>
+            ),
+          });
+          return;
+        }
+      }
+
       const current = await fetchAssignments(selectedService.id_uuid);
       if (current.volunteers.some((a) => a.volunteerId === selectedVolunteerId)) return;
 
@@ -1511,28 +1606,36 @@ export default function Schedules() {
               const my = myAssignment(service);
               const { volunteers: assignments, preachers: preacherAssignments } =
                 getNormalizedAssignments(service);
+              const eventType = eventTypes?.find((type) => type.id === service.eventTypeId);
+              const eventTypeName = eventType?.name;
+              const readableEventColor = getReadableEventColor(eventType?.color);
+              const serviceTitle = getServiceTitle(service);
+              const showEventType = !!eventTypeName && eventTypeName !== serviceTitle;
 
               return (
                 <Card key={service.id_uuid}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                                            {(() => {
-                        const eventType = eventTypes?.find((type) => type.id === service.eventTypeId);
-                        const readableEventColor = getReadableEventColor(eventType?.color);
-                        return (
-                          <CardTitle
-                            className="text-base"
-                            style={readableEventColor ? { color: readableEventColor } : undefined}
-                          >
-                            {getServiceTitle(service)}
-                          </CardTitle>
-                        );
-                      })()}
+                      <CardTitle
+                        className="text-lg font-semibold"
+                        style={readableEventColor ? { color: readableEventColor } : undefined}
+                      >
+                        {serviceTitle}
+                      </CardTitle>
 
-                      <p className="text-sm text-muted-foreground">
-                        {format(parseISO(service.date), "dd/MM/yyyy")}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{format(parseISO(service.date), "dd/MM/yyyy")}</span>
+                        {showEventType && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: eventType?.color || "#94a3b8" }}
+                            />
+                            {eventTypeName}
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-2">{getServiceSummaryBadge(service)}</div>
                     </div>
 
@@ -1753,8 +1856,12 @@ export default function Schedules() {
                           {serviceTitle}
                         </span>
                         {showEventType && (
-                          <span className="block text-[9px] sm:text-[10px] text-muted-foreground truncate">
-                            Tipo: {eventTypeName}
+                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] text-slate-600">
+                            <span
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={{ backgroundColor: eventType?.color || "#94a3b8" }}
+                            />
+                            {eventTypeName}
                           </span>
                         )}
                         {preachers.length > 0 && (
@@ -2183,6 +2290,36 @@ export default function Schedules() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={conflictDialogOpen} onOpenChange={setConflictDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Conflitos detectados</DialogTitle>
+            <DialogDescription>
+              Alguns voluntários já estão escalados em outras escalas no mesmo dia.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 max-h-72 overflow-y-auto">
+            {conflictDetails.map((item) => (
+              <div key={item.volunteerId} className="rounded-md border p-3">
+                <p className="text-sm font-medium">{item.volunteerName}</p>
+                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {item.services.map((title, index) => (
+                    <li key={`${item.volunteerId}-${index}`} className="list-disc ml-4">
+                      {title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setConflictDialogOpen(false)}>Entendi</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={editPreacherOpen}
         onOpenChange={(open) => {
@@ -2271,27 +2408,37 @@ export default function Schedules() {
           </DialogHeader>
 
           <div className="space-y-2">
-            {dayPickServices.map((service) => (
+            {dayPickServices.map((service) => {
+              const eventType = eventTypes?.find((type) => type.id === service.eventTypeId);
+              const readableEventColor = getReadableEventColor(eventType?.color);
+              const serviceTitle = getServiceTitle(service);
+              const eventTypeName = eventType?.name;
+              const showEventType = !!eventTypeName && eventTypeName !== serviceTitle;
+
+              return (
               <div
                 key={service.id_uuid}
                 className="flex items-center justify-between gap-2 rounded-md border p-2"
               >
                 <div className="min-w-0">
-                  {(() => {
-                    const eventType = eventTypes?.find((type) => type.id === service.eventTypeId);
-                    const readableEventColor = getReadableEventColor(eventType?.color);
-                    return (
-                      <p
-                        className="text-sm font-medium truncate"
-                        style={readableEventColor ? { color: readableEventColor } : undefined}
-                      >
-                        {getServiceTitle(service)}
-                      </p>
-                    );
-                  })()}
-                  <p className="text-xs text-muted-foreground">
-                    {format(parseISO(service.date), "dd/MM/yyyy")}
+                  <p
+                    className="text-sm font-medium truncate"
+                    style={readableEventColor ? { color: readableEventColor } : undefined}
+                  >
+                    {serviceTitle}
                   </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{format(parseISO(service.date), "dd/MM/yyyy")}</span>
+                    {showEventType && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: eventType?.color || "#94a3b8" }}
+                        />
+                        {eventTypeName}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <Button
                   size="sm"
@@ -2303,7 +2450,7 @@ export default function Schedules() {
                   Editar
                 </Button>
               </div>
-            ))}
+            )})}
           </div>
         </DialogContent>
       </Dialog>
