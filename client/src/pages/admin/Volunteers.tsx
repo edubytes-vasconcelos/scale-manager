@@ -1,8 +1,11 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   useVolunteerProfile,
   useVolunteers,
   useMinistries,
+  useVolunteerUnavailability,
+  useCreateVolunteerUnavailability,
+  useDeleteVolunteerUnavailability,
 } from "@/hooks/use-data";
 import {
   Card,
@@ -40,6 +43,8 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import type { Volunteer, MinistryAssignment } from "@shared/schema";
@@ -101,6 +106,9 @@ export default function Volunteers() {
 
   const { data: volunteers, isLoading } = useVolunteers(organizationId);
   const { data: ministries } = useMinistries(organizationId);
+  const { data: unavailability } = useVolunteerUnavailability(organizationId);
+  const createUnavailability = useCreateVolunteerUnavailability();
+  const deleteUnavailability = useDeleteVolunteerUnavailability();
   const { toast } = useToast();
 
   const isAdmin = profile?.accessLevel === "admin";
@@ -144,6 +152,16 @@ export default function Volunteers() {
   const [saving, setSaving] = useState(false);
   const [ministryError, setMinistryError] = useState(false);
   const ministryBlockRef = useRef<HTMLDivElement | null>(null);
+  const [unavailabilityStart, setUnavailabilityStart] = useState("");
+  const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
+  const [unavailabilityReason, setUnavailabilityReason] = useState("");
+
+  const currentUnavailability = useMemo(() => {
+    if (!currentVolunteer?.id) return [];
+    return (unavailability || []).filter(
+      (entry) => entry.volunteerId === currentVolunteer.id
+    );
+  }, [unavailability, currentVolunteer?.id]);
 
   /* =========================
      DELETE STATE
@@ -174,6 +192,9 @@ export default function Volunteers() {
     setFormEmail("");
     setFormWhatsapp("");
     setFormCanManagePreaching(false);
+    setUnavailabilityStart("");
+    setUnavailabilityEnd("");
+    setUnavailabilityReason("");
     setFormAssignments(
       !isAdmin && isLeader && leaderMinistryIds.length === 1
         ? [{ ministryId: leaderMinistryIds[0], isLeader: false }]
@@ -190,6 +211,9 @@ export default function Volunteers() {
     setFormWhatsapp(v.whatsapp || "");
     setFormCanManagePreaching(!!v.canManagePreachingSchedule);
     setFormAssignments(v.ministryAssignments || []);
+    setUnavailabilityStart("");
+    setUnavailabilityEnd("");
+    setUnavailabilityReason("");
     setFormOpen(true);
   };
 
@@ -273,6 +297,67 @@ const safeAssignments = isAdmin
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddUnavailability = async () => {
+    if (!organizationId || !currentVolunteer?.id) return;
+    if (!unavailabilityStart || !unavailabilityEnd) {
+      toast({
+        title: "Periodo obrigatorio",
+        description: "Informe a data inicial e final.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (unavailabilityEnd < unavailabilityStart) {
+      toast({
+        title: "Periodo invalido",
+        description: "A data final deve ser igual ou maior que a inicial.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await createUnavailability.mutateAsync({
+        organizationId,
+        volunteerId: currentVolunteer.id,
+        startDate: unavailabilityStart,
+        endDate: unavailabilityEnd,
+        reason: unavailabilityReason.trim() || null,
+      });
+
+      setUnavailabilityStart("");
+      setUnavailabilityEnd("");
+      setUnavailabilityReason("");
+      toast({
+        title: "Indisponibilidade registrada",
+        description: "Periodo adicionado com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteUnavailability = async (id: string) => {
+    if (!organizationId) return;
+    try {
+      await deleteUnavailability.mutateAsync({ id, organizationId });
+      toast({
+        title: "Indisponibilidade removida",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -705,6 +790,95 @@ const safeAssignments = isAdmin
                 </p>
               )}
             </div>
+
+            {formMode === "edit" && currentVolunteer && (
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Indisponibilidades</label>
+                  <Badge variant="outline" className="text-xs">
+                    {currentUnavailability.length}
+                  </Badge>
+                </div>
+
+                {currentUnavailability.length > 0 ? (
+                  <div className="space-y-2">
+                    {currentUnavailability.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex flex-wrap items-start justify-between gap-2 rounded-md border px-3 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-medium">
+                            {format(parseISO(String(entry.startDate)), "dd/MM/yyyy", {
+                              locale: ptBR,
+                            })}{" "}
+                            -{" "}
+                            {format(parseISO(String(entry.endDate)), "dd/MM/yyyy", {
+                              locale: ptBR,
+                            })}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {entry.reason?.trim() || "Sem motivo informado"}
+                          </p>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => handleDeleteUnavailability(entry.id)}
+                          disabled={deleteUnavailability.isPending}
+                          title="Remover"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma indisponibilidade registrada.
+                  </p>
+                )}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Inicio</label>
+                    <Input
+                      type="date"
+                      value={unavailabilityStart}
+                      onChange={(e) => setUnavailabilityStart(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Fim</label>
+                    <Input
+                      type="date"
+                      value={unavailabilityEnd}
+                      onChange={(e) => setUnavailabilityEnd(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Motivo</label>
+                    <Input
+                      placeholder="Ex: Viagem"
+                      value={unavailabilityReason}
+                      onChange={(e) => setUnavailabilityReason(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddUnavailability}
+                  disabled={createUnavailability.isPending}
+                >
+                  {createUnavailability.isPending && (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  )}
+                  Adicionar indisponibilidade
+                </Button>
+              </div>
+            )}
 
           </div>
 

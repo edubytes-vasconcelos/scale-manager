@@ -3,6 +3,7 @@ import {
   useVolunteerProfile,
   useVolunteers,
   useMinistries,
+  useVolunteerUnavailability,
   useEventTypes,
   useServices,
   usePreachers,
@@ -107,6 +108,7 @@ export default function Schedules() {
   const { data: ministries } = useMinistries(profile?.organizationId);
   const { data: preachers } = usePreachers(profile?.organizationId);
   const { data: eventTypes } = useEventTypes(profile?.organizationId);
+  const { data: unavailability } = useVolunteerUnavailability(profile?.organizationId);
   const { toast } = useToast();
   const upsertPreacher = useUpsertPreacher();
   const updatePreacher = useUpdatePreacher();
@@ -130,7 +132,6 @@ export default function Schedules() {
     "none" | "myPending" | "today" | "week"
   >("none");
 
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [isSavingCreate, setIsSavingCreate] = useState(false);
   const [newDate, setNewDate] = useState("");
   const [newEventTypeId, setNewEventTypeId] = useState("");
@@ -225,6 +226,19 @@ export default function Schedules() {
 
   const getPreacherName = (id?: string) =>
     preachers?.find((p) => p.id === id)?.name || "-";
+
+  const isDateInRange = (date: string, start: string, end: string) =>
+    date >= start && date <= end;
+
+  const getVolunteerUnavailability = (volunteerId?: string, date?: string) => {
+    if (!volunteerId || !date) return null;
+    return unavailability?.find((entry) =>
+      entry.volunteerId === volunteerId &&
+      entry.startDate &&
+      entry.endDate &&
+      isDateInRange(date, String(entry.startDate), String(entry.endDate))
+    ) || null;
+  };
 
   const normalizeSearch = (value: string) =>
     value
@@ -669,7 +683,11 @@ export default function Schedules() {
           .select()
           .single();
         if (error) throw error;
-        createdService = data;
+        createdService = {
+          ...data,
+          organizationId: data.organization_id ?? data.organizationId,
+          eventTypeId: data.event_type_id ?? data.eventTypeId,
+        };
       } else {
         const { error } = await supabase.from("services").insert(payload);
         if (error) throw error;
@@ -678,8 +696,6 @@ export default function Schedules() {
       queryClient.invalidateQueries({
         queryKey: ["services", profile.organizationId],
       });
-      setCreateDialogOpen(false);
-      resetCreateForm();
 
       toast({
         title: "Escala criada!",
@@ -687,7 +703,11 @@ export default function Schedules() {
       });
 
       if (createdService) {
+        resetCreateForm();
         openAssignDialog(createdService as Service, { focusPreacher: true });
+      } else {
+        resetCreateForm();
+        setAssignDialogOpen(false);
       }
     } catch (error: any) {
       console.error(error);
@@ -698,6 +718,23 @@ export default function Schedules() {
       });
     } finally {
       setIsSavingCreate(false);
+    }
+  };
+
+  const openQuickCreateDialog = (options?: {
+    date?: string;
+    focusPreacher?: boolean;
+  }) => {
+    if (!canManageSchedules) return;
+    setSelectedService(null);
+    setNewDate(options?.date || "");
+    setNewEventTypeId("");
+    setNewCustomName("");
+    setRecurrenceType("none");
+    setRecurrenceEndDate("");
+    setAssignDialogOpen(true);
+    if (options?.focusPreacher) {
+      setTimeout(() => preacherSearchRef.current?.focus(), 120);
     }
   };
 
@@ -787,6 +824,26 @@ export default function Schedules() {
           });
           return;
         }
+      }
+
+      const unavailabilityEntry = getVolunteerUnavailability(
+        selectedVolunteerId,
+        selectedService.date
+      );
+      if (unavailabilityEntry) {
+        const reason = unavailabilityEntry.reason?.trim();
+        const period = `${format(parseISO(String(unavailabilityEntry.startDate)), "dd/MM")} - ${format(
+          parseISO(String(unavailabilityEntry.endDate)),
+          "dd/MM"
+        )}`;
+        toast({
+          title: "Voluntario indisponivel",
+          description: reason
+            ? `${period}. Motivo: ${reason}`
+            : `${period}.`,
+          variant: "destructive",
+        });
+        return;
       }
 
       const current = await fetchAssignments(selectedService.id_uuid);
@@ -1188,8 +1245,7 @@ export default function Schedules() {
 
     const dayServices = servicesForDay(day);
     if (dayServices.length === 0) {
-      setNewDate(format(day, "yyyy-MM-dd"));
-      setCreateDialogOpen(true);
+      openQuickCreateDialog({ date: format(day, "yyyy-MM-dd"), focusPreacher: true });
       return;
     }
 
@@ -1410,10 +1466,13 @@ export default function Schedules() {
     };
   };
 
-  const selectedAssignments = getNormalizedAssignments(selectedService);
+  const selectedAssignments = selectedService
+    ? getNormalizedAssignments(selectedService)
+    : { volunteers: [], preachers: [] };
   const eventTypeNameForSelected = selectedService
     ? eventTypes?.find((type) => type.id === selectedService.eventTypeId)?.name
     : null;
+  const isCreateMode = !selectedService;
   const showCustomEventName =
     editEventTypeId === "" || !eventTypeNameForSelected;
   const isEventDirty =
@@ -1463,7 +1522,7 @@ export default function Schedules() {
           </Button>
 
           {canManageSchedules && (
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <Button onClick={() => openQuickCreateDialog()}>
               <Plus className="w-4 h-4 mr-2" /> Nova Escala
             </Button>
           )}
@@ -1603,7 +1662,7 @@ export default function Schedules() {
                 Crie uma escala para começar a organizar os eventos.
               </p>
               {canManageSchedules && (
-                <Button onClick={() => setCreateDialogOpen(true)}>
+                <Button onClick={() => openQuickCreateDialog()}>
                   <Plus className="w-4 h-4 mr-2" />
                   Criar escala
                 </Button>
@@ -1895,15 +1954,41 @@ export default function Schedules() {
         </div>
       )}
 
-      {/* DIALOG NOVA ESCALA */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      {/* DIALOG GESTÃO DE VOLUNTÁRIOS */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova Escala</DialogTitle>
-            <DialogDescription>Crie uma nova escala</DialogDescription>
+            <DialogTitle>{isCreateMode ? "Nova escala" : "Gerenciar escala"}</DialogTitle>
+            <DialogDescription>
+              {selectedService ? (
+                (() => {
+                  const eventType = eventTypes?.find(
+                    (type) => type.id === selectedService.eventTypeId
+                  );
+                  const readableEventColor = getReadableEventColor(eventType?.color);
+                  return (
+                    <span
+                      style={readableEventColor ? { color: readableEventColor } : undefined}
+                    >
+                      {getServiceTitle(selectedService)}
+                    </span>
+                  );
+                })()
+              ) : newDate ? (
+                <span className="text-muted-foreground">
+                  {format(parseISO(newDate), "EEEE, dd/MM", { locale: ptBR })}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Defina a data e o evento para criar a escala.
+                </span>
+              )}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
+            {isCreateMode ? (
+              <>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Evento
             </div>
@@ -1944,7 +2029,7 @@ export default function Schedules() {
             <div className="space-y-1">
               <Label>Nome personalizado</Label>
               <Input
-                placeholder="Ex: Reunião Especial"
+                placeholder="Ex: Reuniao Especial"
                 value={newCustomName}
                 onChange={(e) => setNewCustomName(e.target.value)}
               />
@@ -1952,7 +2037,7 @@ export default function Schedules() {
 
             <div className="space-y-2 pt-2 border-t">
               <div className="flex items-center justify-between">
-                <Label>Recorrência</Label>
+                <Label>Recorrencia</Label>
               </div>
 
               <RadioGroup
@@ -1965,11 +2050,11 @@ export default function Schedules() {
               >
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="none" id="r-none" />
-                  <Label htmlFor="r-none">Única</Label>
+                  <Label htmlFor="r-none">Unica</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="daily" id="r-daily" />
-                  <Label htmlFor="r-daily">Diária</Label>
+                  <Label htmlFor="r-daily">Diaria</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="weekly" id="r-weekly" />
@@ -1979,7 +2064,7 @@ export default function Schedules() {
 
               {recurrenceType !== "none" && (
                 <div className="space-y-1">
-                  <Label>Até quando?</Label>
+                  <Label>Ate quando?</Label>
                   <Input
                     type="date"
                     min={getMinEndDate()}
@@ -1990,48 +2075,16 @@ export default function Schedules() {
                 </div>
               )}
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCreateDialogOpen(false);
-                resetCreateForm();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleCreateService} disabled={isSavingCreate}>
-              Criar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="flex justify-end">
+              <Button onClick={handleCreateService} disabled={isSavingCreate || !newDate}>
+                Criar
+              </Button>
+            </div>
 
-      {/* DIALOG GESTÃO DE VOLUNTÁRIOS */}
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Gerenciar escala</DialogTitle>
-            <DialogDescription>
-              {selectedService && (() => {
-                const eventType = eventTypes?.find(
-                  (type) => type.id === selectedService.eventTypeId
-                );
-                const readableEventColor = getReadableEventColor(eventType?.color);
-                return (
-                  <span
-                    style={readableEventColor ? { color: readableEventColor } : undefined}
-                  >
-                    {getServiceTitle(selectedService)}
-                  </span>
-                );
-              })()}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-5">
+              </>
+            ) : (
+              <>
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Evento
             </div>
@@ -2207,14 +2260,40 @@ export default function Schedules() {
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um voluntario" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {volunteers?.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectContent>
+                    {volunteers?.map((v) => {
+                      const unavailabilityEntry = getVolunteerUnavailability(
+                        v.id,
+                        selectedService?.date
+                      );
+                      const isUnavailable = !!unavailabilityEntry;
+                      const reason = unavailabilityEntry?.reason?.trim();
+                      const period = unavailabilityEntry
+                        ? `${format(
+                            parseISO(String(unavailabilityEntry.startDate)),
+                            "dd/MM"
+                          )} - ${format(
+                            parseISO(String(unavailabilityEntry.endDate)),
+                            "dd/MM"
+                          )}`
+                        : "";
+
+                      return (
+                        <SelectItem key={v.id} value={v.id} disabled={isUnavailable}>
+                          <div className="flex flex-col">
+                            <span className="text-sm">{v.name}</span>
+                            {isUnavailable && (
+                              <span className="text-xs text-muted-foreground">
+                                Indisponivel ({period}
+                                {reason ? `: ${reason}` : ""})
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
 
                 <Button
                   onClick={handleAddVolunteer}
@@ -2307,8 +2386,10 @@ export default function Schedules() {
                 </Button>
               </div>
             )}
-          </div>
-        </DialogContent>
+          
+              </>
+            )}
+          </div></DialogContent>
       </Dialog>
 
       <Dialog open={conflictDialogOpen} onOpenChange={setConflictDialogOpen}>

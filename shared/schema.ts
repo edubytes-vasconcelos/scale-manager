@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, jsonb, boolean, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -30,6 +30,17 @@ export const ministries = pgTable("ministries", {
   organizationId: uuid("organization_id"),
   name: text("name").notNull(),
   icon: text("icon"),
+});
+
+// Volunteer unavailability (full day ranges)
+export const volunteerUnavailability = pgTable("volunteer_unavailability", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id"),
+  volunteerId: uuid("volunteer_id"),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at"),
 });
 
 // Mirrors the existing Supabase 'teams' table
@@ -111,6 +122,7 @@ export type Organization = typeof organizations.$inferSelect;
 export type Ministry = typeof ministries.$inferSelect;
 export type Team = typeof teams.$inferSelect;
 export type EventType = typeof eventTypes.$inferSelect;
+export type VolunteerUnavailability = typeof volunteerUnavailability.$inferSelect;
 
 // Extended type with organization name
 export type VolunteerWithOrg = Volunteer & {

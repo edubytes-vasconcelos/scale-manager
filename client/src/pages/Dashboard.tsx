@@ -5,6 +5,9 @@ import {
   useMySchedules,
   useUpdateAssignmentStatus,
   useEventTypes,
+  useVolunteerUnavailability,
+  useCreateVolunteerUnavailability,
+  useDeleteVolunteerUnavailability,
 } from "@/hooks/use-data";
 import { ServiceCard } from "@/components/ServiceCard";
 import {
@@ -22,6 +25,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +50,9 @@ export default function Dashboard() {
     volunteer?.organizationId
   );
   const { data: eventTypes } = useEventTypes(volunteer?.organizationId);
+  const { data: unavailability } = useVolunteerUnavailability(volunteer?.organizationId);
+  const createUnavailability = useCreateVolunteerUnavailability();
+  const deleteUnavailability = useDeleteVolunteerUnavailability();
   const { data: mySchedules, isLoading: loadingMySchedules } =
     useMySchedules(volunteer?.id, volunteer?.organizationId);
   const updateStatus = useUpdateAssignmentStatus();
@@ -54,6 +62,9 @@ export default function Dashboard() {
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(
     null
   );
+  const [unavailabilityStart, setUnavailabilityStart] = useState("");
+  const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
+  const [unavailabilityReason, setUnavailabilityReason] = useState("");
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
 
@@ -74,6 +85,11 @@ export default function Dashboard() {
       return assignment?.status === "confirmed";
     });
   }, [mySchedules, volunteer?.id]);
+
+  const myUnavailability = useMemo(() => {
+    if (!unavailability || !volunteer?.id) return [];
+    return unavailability.filter((entry) => entry.volunteerId === volunteer.id);
+  }, [unavailability, volunteer?.id]);
 
   const nextSchedule = useMemo(() => {
     if (!mySchedules || mySchedules.length === 0) return null;
@@ -165,6 +181,69 @@ export default function Dashboard() {
       toast({
         title: "Erro",
         description: "Não foi possível atualizar sua confirmação.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddUnavailability = async () => {
+    if (!volunteer?.organizationId || !volunteer?.id) return;
+    if (!unavailabilityStart || !unavailabilityEnd) {
+      toast({
+        title: "Periodo obrigatorio",
+        description: "Informe a data inicial e final.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (unavailabilityEnd < unavailabilityStart) {
+      toast({
+        title: "Periodo invalido",
+        description: "A data final deve ser igual ou maior que a inicial.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await createUnavailability.mutateAsync({
+        organizationId: volunteer.organizationId,
+        volunteerId: volunteer.id,
+        startDate: unavailabilityStart,
+        endDate: unavailabilityEnd,
+        reason: unavailabilityReason.trim() || null,
+      });
+      setUnavailabilityStart("");
+      setUnavailabilityEnd("");
+      setUnavailabilityReason("");
+      toast({
+        title: "Indisponibilidade registrada",
+        description: "Periodo adicionado com sucesso.",
+      });
+    } catch {
+      toast({
+        title: "Erro",
+        description: "Nao foi possivel salvar sua indisponibilidade.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteUnavailability = async (id: string) => {
+    if (!volunteer?.organizationId) return;
+    try {
+      await deleteUnavailability.mutateAsync({
+        id,
+        organizationId: volunteer.organizationId,
+      });
+      toast({
+        title: "Indisponibilidade removida",
+      });
+    } catch {
+      toast({
+        title: "Erro",
+        description: "Nao foi possivel remover.",
         variant: "destructive",
       });
     }
@@ -352,6 +431,96 @@ export default function Dashboard() {
               </p>
             </div>
           )}
+        </section>
+
+        {/* MINHA INDISPONIBILIDADE */}
+        <section className="space-y-4">
+          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <Clock className="w-5 h-5 text-primary" />
+            Minha indisponibilidade
+          </h2>
+
+          <div className="rounded-2xl border bg-background p-4 space-y-4">
+            {myUnavailability.length > 0 ? (
+              <div className="space-y-2">
+                {myUnavailability.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        {format(parseISO(String(entry.startDate)), "dd/MM/yyyy", {
+                          locale: ptBR,
+                        })}{" "}
+                        -{" "}
+                        {format(parseISO(String(entry.endDate)), "dd/MM/yyyy", {
+                          locale: ptBR,
+                        })}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {entry.reason?.trim() || "Sem motivo informado"}
+                      </p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => handleDeleteUnavailability(entry.id)}
+                      disabled={deleteUnavailability.isPending}
+                      title="Remover"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Nenhuma indisponibilidade registrada.
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Inicio</Label>
+                <Input
+                  type="date"
+                  value={unavailabilityStart}
+                  onChange={(e) => setUnavailabilityStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Fim</Label>
+                <Input
+                  type="date"
+                  value={unavailabilityEnd}
+                  onChange={(e) => setUnavailabilityEnd(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-xs font-medium">Motivo</Label>
+                <Input
+                  placeholder="Ex: Viagem, compromisso familiar"
+                  value={unavailabilityReason}
+                  onChange={(e) => setUnavailabilityReason(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={handleAddUnavailability}
+                disabled={createUnavailability.isPending}
+              >
+                {createUnavailability.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                Adicionar indisponibilidade
+              </Button>
+            </div>
+          </div>
         </section>
 
         {/* SERVIÇOS */}

@@ -13,6 +13,7 @@ import type {
   ChatMessage,
   ChatMessageWithSender,
   Preacher,
+  VolunteerUnavailability,
 } from "@shared/schema";
 import { normalizeAssignments } from "@/lib/assignments";
 
@@ -246,6 +247,31 @@ export function useUpdateAssignmentStatus() {
   });
 }
 
+export function useVolunteerUnavailability(organizationId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["volunteer_unavailability", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [];
+      const { data, error } = await supabase
+        .from("volunteer_unavailability")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("start_date", { ascending: true });
+
+      if (error) throw error;
+      return (data || []).map((item: any) => ({
+        ...item,
+        organizationId: item.organization_id ?? item.organizationId,
+        volunteerId: item.volunteer_id ?? item.volunteerId,
+        startDate: item.start_date ?? item.startDate,
+        endDate: item.end_date ?? item.endDate,
+        createdAt: item.created_at ?? item.createdAt,
+      })) as VolunteerUnavailability[];
+    },
+    enabled: !!organizationId,
+  });
+}
+
 export function useCreateVolunteer() {
   return useMutation({
     mutationFn: async (volunteer: {
@@ -273,6 +299,62 @@ export function useCreateVolunteer() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volunteers"] });
+    },
+  });
+}
+
+export function useCreateVolunteerUnavailability() {
+  return useMutation({
+    mutationFn: async (payload: {
+      organizationId: string;
+      volunteerId: string;
+      startDate: string;
+      endDate: string;
+      reason?: string | null;
+    }) => {
+      const { data, error } = await supabase
+        .from("volunteer_unavailability")
+        .insert({
+          id: crypto.randomUUID(),
+          organization_id: payload.organizationId,
+          volunteer_id: payload.volunteerId,
+          start_date: payload.startDate,
+          end_date: payload.endDate,
+          reason: payload.reason || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["volunteer_unavailability", variables.organizationId],
+      });
+    },
+  });
+}
+
+export function useDeleteVolunteerUnavailability() {
+  return useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      organizationId: string;
+    }) => {
+      const { error } = await supabase
+        .from("volunteer_unavailability")
+        .delete()
+        .eq("id", payload.id)
+        .eq("organization_id", payload.organizationId);
+
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["volunteer_unavailability", variables.organizationId],
+      });
     },
   });
 }
