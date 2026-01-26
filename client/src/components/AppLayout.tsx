@@ -33,6 +33,7 @@ const navItems: {
   label: string;
   icon: any;
   roles?: Role[];
+  requiresPreachingPermission?: boolean;
   breadcrumb?: string[];
 }[] = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -57,6 +58,7 @@ const navItems: {
     label: "Tipos de Evento",
     icon: Calendar,
     roles: ["admin"],
+    requiresPreachingPermission: true,
     breadcrumb: ["Admin", "Tipos de Evento"],
   },
   {
@@ -122,6 +124,7 @@ export default function AppLayout({
   };
 
   const userRole = profile?.accessLevel as Role | undefined;
+  const canManagePreachingSchedule = profile?.canManagePreachingSchedule ?? false;
 
   /**
    * Filtro DEFENSIVO:
@@ -129,9 +132,11 @@ export default function AppLayout({
    * - Quando profile chega → filtra por role
    */
   const filteredNav = navItems.filter((item) => {
-    if (!item.roles) return true;
+    if (!item.roles && !item.requiresPreachingPermission) return true;
     if (!userRole) return true;
-    return item.roles.includes(userRole);
+    if (item.requiresPreachingPermission && canManagePreachingSchedule) return true;
+    if (item.roles && item.roles.includes(userRole)) return true;
+    return false;
   });
 
   return (

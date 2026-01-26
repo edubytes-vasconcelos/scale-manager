@@ -67,7 +67,10 @@ export default function EventTypes() {
   const createEventType = useCreateEventType();
   const updateEventType = useUpdateEventType();
   const { toast } = useToast();
-  
+
+  const canManageEventTypes =
+    !!profile && (profile.accessLevel === "admin" || profile.canManagePreachingSchedule);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingEventTypeId, setEditingEventTypeId] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export default function EventTypes() {
   const [customColor, setCustomColor] = useState("");
 
   const isSaving = createEventType.isPending || updateEventType.isPending;
-  const canSubmit = !!profile?.organizationId && !isSaving;
+  const canSubmit = canManageEventTypes && !!profile?.organizationId && !isSaving;
 
   const normalizeName = (value: string) => value.trim().toLowerCase();
   const normalizeHex = (value: string) => {
@@ -222,7 +225,7 @@ export default function EventTypes() {
           </Badge>
           <Button 
             onClick={openCreateDialog} 
-            disabled={profileLoading || !profile?.organizationId}
+            disabled={profileLoading || !profile?.organizationId || !canManageEventTypes}
             data-testid="button-add-event-type"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -230,6 +233,12 @@ export default function EventTypes() {
           </Button>
         </div>
       </div>
+
+      {!profileLoading && profile && !canManageEventTypes && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Voce nao tem permissao para criar ou editar tipos de evento.
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -277,6 +286,7 @@ export default function EventTypes() {
                     size="icon"
                     variant="ghost"
                     onClick={() => openEditDialog(eventType)}
+                    disabled={!canManageEventTypes}
                     title="Editar tipo"
                   >
                     <Pencil className="w-4 h-4" />

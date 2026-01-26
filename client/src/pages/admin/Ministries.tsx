@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useVolunteerProfile, useMinistries, useCreateMinistry } from "@/hooks/use-data";
+import { useVolunteerProfile, useMinistries, useCreateMinistry, useUpdateMinistry } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles, Plus, Loader2 } from "lucide-react";
+import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles, Plus, Loader2, Pencil } from "lucide-react";
 
 const iconOptions = [
   { value: "church", label: "Igreja", Icon: Church },
@@ -40,19 +40,40 @@ export default function Ministries() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: ministries, isLoading } = useMinistries(profile?.organizationId);
   const createMinistry = useCreateMinistry();
+  const updateMinistry = useUpdateMinistry();
   const { toast } = useToast();
   
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingMinistryId, setEditingMinistryId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     icon: "church",
   });
 
-  const canSubmit = !!profile?.organizationId && !createMinistry.isPending;
+  const isSaving = createMinistry.isPending || updateMinistry.isPending;
+  const canSubmit = !!profile?.organizationId && !isSaving;
 
   const getIcon = (iconName: string | null) => {
     if (!iconName) return Church;
     return iconMap[iconName.toLowerCase()] || Church;
+  };
+
+  const openCreateDialog = () => {
+    setFormMode("create");
+    setEditingMinistryId(null);
+    setFormData({ name: "", icon: "church" });
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (ministry: { id: string; name: string; icon?: string | null }) => {
+    setFormMode("edit");
+    setEditingMinistryId(ministry.id);
+    setFormData({
+      name: ministry.name,
+      icon: ministry.icon || "church",
+    });
+    setDialogOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,22 +90,36 @@ export default function Ministries() {
     }
 
     try {
-      await createMinistry.mutateAsync({
-        name: formData.name.trim(),
-        icon: formData.icon,
-        organizationId: profile.organizationId,
-      });
+      if (formMode === "edit" && editingMinistryId) {
+        await updateMinistry.mutateAsync({
+          id: editingMinistryId,
+          name: formData.name.trim(),
+          icon: formData.icon,
+          organizationId: profile.organizationId,
+        });
+      } else {
+        await createMinistry.mutateAsync({
+          name: formData.name.trim(),
+          icon: formData.icon,
+          organizationId: profile.organizationId,
+        });
+      }
 
       toast({
         title: "Sucesso",
-        description: "Ministério cadastrado com sucesso!",
+        description:
+          formMode === "edit"
+            ? "Ministério atualizado com sucesso!"
+            : "Ministério cadastrado com sucesso!",
       });
 
       setFormData({ name: "", icon: "church" });
       setDialogOpen(false);
+      setEditingMinistryId(null);
+      setFormMode("create");
     } catch (error: any) {
       toast({
-        title: "Erro ao cadastrar",
+        title: formMode === "edit" ? "Erro ao atualizar" : "Erro ao cadastrar",
         description: error.message || "Tente novamente.",
         variant: "destructive",
       });
@@ -108,7 +143,7 @@ export default function Ministries() {
             {ministries?.length || 0} ministérios
           </Badge>
           <Button 
-            onClick={() => setDialogOpen(true)} 
+            onClick={openCreateDialog} 
             disabled={profileLoading || !profile?.organizationId}
             data-testid="button-add-ministry"
           >
@@ -131,11 +166,21 @@ export default function Ministries() {
             return (
               <Card key={ministry.id} data-testid={`card-ministry-${ministry.id}`}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Icon className="w-5 h-5 text-primary" />
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Icon className="w-5 h-5 text-primary" />
+                      </div>
+                      <CardTitle className="text-base">{ministry.name}</CardTitle>
                     </div>
-                    <CardTitle className="text-base">{ministry.name}</CardTitle>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => openEditDialog(ministry)}
+                      title="Editar ministério"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
                   </div>
                 </CardHeader>
               </Card>
@@ -157,7 +202,9 @@ export default function Ministries() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo Ministério</DialogTitle>
+            <DialogTitle>
+              {formMode === "edit" ? "Editar Ministério" : "Novo Ministério"}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -196,13 +243,13 @@ export default function Ministries() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={!canSubmit} data-testid="button-submit-ministry">
-                {createMinistry.isPending ? (
+                {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Salvando...
                   </>
                 ) : (
-                  "Salvar"
+                  formMode === "edit" ? "Salvar alterações" : "Salvar"
                 )}
               </Button>
             </DialogFooter>

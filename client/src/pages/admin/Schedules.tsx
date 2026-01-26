@@ -194,6 +194,7 @@ export default function Schedules() {
 
   const canDeleteService = (service: Service): boolean => {
     if (isAdmin) return true;
+    if (canManagePreaching) return true;
     if (!isLeader) return false;
     if (!volunteers) return false;
 

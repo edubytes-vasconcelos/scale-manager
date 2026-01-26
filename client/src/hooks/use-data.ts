@@ -304,6 +304,34 @@ export function useCreateMinistry() {
   });
 }
 
+export function useUpdateMinistry() {
+  return useMutation({
+    mutationFn: async (ministry: {
+      id: string;
+      name: string;
+      icon?: string;
+      organizationId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from("ministries")
+        .update({
+          name: ministry.name,
+          icon: ministry.icon || null,
+        })
+        .eq("id", ministry.id)
+        .eq("organization_id", ministry.organizationId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ministries"] });
+    },
+  });
+}
+
 export function useCreateEventType() {
   return useMutation({
     mutationFn: async (eventType: {
