@@ -33,28 +33,30 @@ export function useVolunteerProfile() {
           organization:organizations(name)
         `)
         .eq("auth_user_id", user.id)
-        .single();
+        .order("organization_id", { ascending: false, nullsFirst: false })
+        .limit(1);
 
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
-      if (!data) return null;
+      const first = Array.isArray(data) ? data[0] : data;
+      if (!first) return null;
 
       // Map snake_case from Supabase to camelCase for TypeScript
       return {
-        id: data.id,
-        authUserId: data.auth_user_id,
-        organizationId: data.organization_id,
-        accessLevel: data.access_level,
-        canManagePreachingSchedule: data.can_manage_preaching_schedule ?? false,
-        name: data.name,
-        email: data.email,
-        whatsapp: data.whatsapp,
-        acceptsNotifications: data.accepts_notifications,
-        ministryAssignments: data.ministry_assignments,
-        createdAt: data.created_at,
-        organization: data.organization,
+        id: first.id,
+        authUserId: first.auth_user_id,
+        organizationId: first.organization_id,
+        accessLevel: first.access_level,
+        canManagePreachingSchedule: first.can_manage_preaching_schedule ?? false,
+        name: first.name,
+        email: first.email,
+        whatsapp: first.whatsapp,
+        acceptsNotifications: first.accepts_notifications,
+        ministryAssignments: first.ministry_assignments,
+        createdAt: first.created_at,
+        organization: first.organization,
       } as VolunteerWithOrg;
     },
     enabled: !!user,

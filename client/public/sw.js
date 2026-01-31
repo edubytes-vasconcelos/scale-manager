@@ -1,44 +1,31 @@
-const CACHE_NAME = "app-cache-v3";
-
-self.addEventListener("install", () => {
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      )
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener("fetch", (event) => {
-  const req = event.request;
-
-  // 🚫 NÃO cachear extensões, file://, etc
-  if (
-    req.method !== "GET" ||
-    !req.url.startsWith("http")
-  ) {
-    return;
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'Nova atualizacao', body: event.data?.text?.() };
   }
 
-  event.respondWith(
-    fetch(req)
-      .then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(req, clone).catch(() => {});
-        });
-        return res;
-      })
-      .catch(() => caches.match(req))
+  const title = data.title || 'Nova atualizacao';
+  const options = {
+    body: data.body || 'Verifique sua escala.',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    data: data.data || {},
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow('/');
+      return undefined;
+    })
   );
 });

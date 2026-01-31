@@ -249,7 +249,7 @@ export default function EventTypes() {
       ) : eventTypes && eventTypes.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {eventTypes.map((eventType) => (
-            <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`}>
+            <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -297,7 +297,7 @@ export default function EventTypes() {
           ))}
         </div>
       ) : (
-        <Card className="border-dashed">
+        <Card className="border-dashed border-slate-200 bg-white">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-3">
               <Calendar className="w-7 h-7 text-slate-300" />

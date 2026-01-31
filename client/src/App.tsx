@@ -19,6 +19,7 @@ import Ministries from "@/pages/admin/Ministries";
 import EventTypes from "@/pages/admin/EventTypes";
 import Teams from "@/pages/admin/Teams";
 import Schedules from "@/pages/admin/Schedules";
+import ChurchSettings from "@/pages/admin/ChurchSettings";
 
 import AppLayout from "@/components/AppLayout";
 
@@ -78,9 +79,9 @@ function ProtectedRoute({
     return <Redirect to="/login" />;
   }
 
-  // ⏳ Sessão existe, mas perfil ainda não carregou
+  // 🧭 Sessão existe, mas perfil ainda não existe (auto cadastro)
   if (!volunteer) {
-    return <AppShellSkeleton message="Carregando perfil..." />;
+    return <Onboarding />;
   }
 
   // 🧭 Usuário autenticado, mas ainda sem organização
@@ -147,6 +148,12 @@ function Router() {
       <Route path="/admin/event-types">
         <ProtectedRoute
           component={() => <AdminPageWrapper Component={EventTypes} />}
+        />
+      </Route>
+
+      <Route path="/admin/church-settings">
+        <ProtectedRoute
+          component={() => <AdminPageWrapper Component={ChurchSettings} />}
         />
       </Route>
 

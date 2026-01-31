@@ -207,7 +207,7 @@ export default function Volunteers() {
     setFormMode("edit");
     setCurrentVolunteer(v);
     setFormName(v.name);
-    setFormEmail(v.email);
+    setFormEmail(v.email || "");
     setFormWhatsapp(v.whatsapp || "");
     setFormCanManagePreaching(!!v.canManagePreachingSchedule);
     setFormAssignments(v.ministryAssignments || []);
@@ -224,10 +224,22 @@ export default function Volunteers() {
   const handleSubmit = async () => {
     if (!organizationId) return;
 
-    if (!formName || !formEmail) {
+    if (!formName.trim()) {
       toast({
-        title: "Campos obrigatórios",
-        description: "Nome e e-mail são obrigatórios.",
+        title: "Campo obrigatorio",
+        description: "Nome é obrigatório.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const hasEmail = !!formEmail.trim();
+    const hasWhatsapp = !!formWhatsapp.trim();
+
+    if (!hasEmail && !hasWhatsapp) {
+      toast({
+        title: "Contato obrigatorio",
+        description: "Informe um e-mail ou WhatsApp.",
         variant: "destructive",
       });
       return;
@@ -263,7 +275,7 @@ const safeAssignments = isAdmin
         const { error } = await supabase.from("volunteers").insert({
           id: crypto.randomUUID(),
           name: formName,
-          email: formEmail.toLowerCase(),
+          email: hasEmail ? formEmail.trim().toLowerCase() : null,
           whatsapp: formWhatsapp || null,
           organization_id: organizationId,
           access_level: "volunteer",
@@ -272,14 +284,19 @@ const safeAssignments = isAdmin
                 });
         if (error) throw error;
       } else if (currentVolunteer) {
+        const updateData: Record<string, any> = {
+          name: formName,
+          whatsapp: formWhatsapp || null,
+          ministry_assignments: safeAssignments,
+          can_manage_preaching_schedule: canManagePreachingValue,
+        };
+        if (!currentVolunteer.email && hasEmail) {
+          updateData.email = formEmail.trim().toLowerCase();
+        }
+
         const { error } = await supabase
           .from("volunteers")
-          .update({
-            name: formName,
-            whatsapp: formWhatsapp || null,
-            ministry_assignments: safeAssignments,
-            can_manage_preaching_schedule: canManagePreachingValue,
-          })
+          .update(updateData)
           .eq("id", currentVolunteer.id);
         if (error) throw error;
       }
@@ -450,7 +467,7 @@ const safeAssignments = isAdmin
       )}
 
       {!isLoading && (!visibleVolunteers || visibleVolunteers.length === 0) ? (
-        <Card className="border-dashed">
+        <Card className="border-dashed border-slate-200 bg-white">
           <CardContent className="py-8 text-center space-y-3">
             <p className="font-medium">Nenhum voluntário cadastrado</p>
             <p className="text-sm text-muted-foreground">
@@ -668,15 +685,16 @@ const safeAssignments = isAdmin
 
             <div className="space-y-1">
               <label className="text-sm font-medium">
-                E-mail <span className="text-destructive">*</span>
+                E-mail
               </label>
               <Input
                 value={formEmail}
                 onChange={(e) => setFormEmail(e.target.value)}
-                disabled={formMode === "edit"}
+                disabled={formMode === "edit" && !!formEmail}
               />
               <p className="text-xs text-muted-foreground">
-                O e-mail não pode ser alterado após o cadastro.
+                O e-mail não pode ser alterado após o cadastro. Se estiver vazio,
+                você poderá informar depois.
               </p>
             </div>
 
@@ -689,6 +707,9 @@ const safeAssignments = isAdmin
                   setFormWhatsapp(maskWhatsapp(e.target.value))
                 }
               />
+              <p className="text-xs text-muted-foreground">
+                Informe ao menos e-mail ou WhatsApp.
+              </p>
             </div>
 
             {isAdmin && (

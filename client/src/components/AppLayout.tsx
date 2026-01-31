@@ -14,6 +14,7 @@ import {
   ClipboardList,
   ChevronRight,
   Home,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -60,6 +61,13 @@ const navItems: {
     roles: ["admin"],
     requiresPreachingPermission: true,
     breadcrumb: ["Admin", "Tipos de Evento"],
+  },
+  {
+    path: "/admin/church-settings",
+    label: "Igreja",
+    icon: Settings,
+    roles: ["admin", "leader"],
+    breadcrumb: ["Admin", "Igreja"],
   },
   {
     path: "/admin/teams",

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useVolunteerProfile,
   useServices,
@@ -21,6 +21,7 @@ import {
   Clock,
   AlertCircle,
   CheckCircle2,
+  Bell,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ import { format, isAfter, addDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
+import { supabase } from "@/lib/supabase";
+import { urlBase64ToUint8Array } from "@/lib/push";
 import { normalizeAssignments } from "@/lib/assignments";
 
 export default function Dashboard() {
@@ -65,6 +68,12 @@ export default function Dashboard() {
   const [unavailabilityStart, setUnavailabilityStart] = useState("");
   const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
   const [unavailabilityReason, setUnavailabilityReason] = useState("");
+
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default");
+  const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
 
@@ -249,6 +258,174 @@ export default function Dashboard() {
     }
   };
 
+  useEffect(() => {
+    const supported =
+      typeof window !== "undefined" &&
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window;
+    setPushSupported(supported);
+
+    if (!supported) {
+      setPushPermission("unsupported");
+      return;
+    }
+
+    setPushPermission(Notification.permission);
+
+    const checkExisting = async () => {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        const subscription = registration
+          ? await registration.pushManager.getSubscription()
+          : null;
+        if (subscription) setPushEnabled(true);
+
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+        if (!user) return;
+
+        const { data } = await supabase
+          .from("push_subscriptions")
+          .select("id")
+          .eq("user_id", user.id)
+          .limit(1);
+        if (data && data.length > 0) setPushEnabled(true);
+      } catch {
+        // ignore
+      }
+    };
+
+    checkExisting();
+  }, []);
+
+  const handleTestPush = async () => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) return;
+      await supabase.functions.invoke("send-push", {
+        body: {
+          userId: user.id,
+          title: "Teste de notificacao",
+          body: "Se voce recebeu, esta tudo certo!",
+        },
+      });
+      toast({
+        title: "Teste enviado",
+        description: "Verifique se a notificacao chegou.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.message || "Nao foi possivel enviar o teste.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDisablePush = async () => {
+    if (!pushSupported) return;
+    setPushLoading(true);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = registration
+        ? await registration.pushManager.getSubscription()
+        : null;
+      if (subscription) {
+        await subscription.unsubscribe();
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (user) {
+        await supabase.from("push_subscriptions").delete().eq("user_id", user.id);
+      }
+
+      setPushEnabled(false);
+      toast({
+        title: "Notificacoes desativadas",
+        description: "Voce nao recebera alertas neste dispositivo.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.message || "Nao foi possivel desativar.",
+        variant: "destructive",
+      });
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    if (!pushSupported) return;
+    if (!vapidPublicKey) {
+      toast({
+        title: "VAPID nao configurado",
+        description: "Defina VITE_VAPID_PUBLIC_KEY no ambiente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPushLoading(true);
+    try {
+      const permission = await Notification.requestPermission();
+      setPushPermission(permission);
+      if (permission !== "granted") {
+        toast({
+          title: "Permissao negada",
+          description: "Ative as notificacoes no navegador.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) throw new Error("Usuario nao autenticado.");
+
+      const { data: existing } = await supabase
+        .from("push_subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("subscription", subscription as any)
+        .limit(1);
+
+      if (!existing || existing.length === 0) {
+        const { error } = await supabase.from("push_subscriptions").insert({
+          user_id: user.id,
+          subscription,
+        });
+        if (error) throw error;
+      }
+
+      setPushEnabled(true);
+      toast({
+        title: "Notificacoes ativadas",
+        description: "Voce recebera alertas de novas escalas.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao ativar notificacoes",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
   const getStatusBadge = (service: any) => {
     const status = getMyStatus(service);
     if (!status) return null;
@@ -329,7 +506,7 @@ export default function Dashboard() {
             bg="bg-info/10"
           />
           {nextSchedule && (
-            <Card className="rounded-2xl border">
+            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-primary uppercase">
                   Próximo compromisso
@@ -349,7 +526,7 @@ export default function Dashboard() {
 
         {/* ALERTA */}
         {pendingSchedules.length > 0 && (
-          <section className="rounded-xl border border-warning/30 bg-warning/10 p-4 flex gap-3">
+          <section className="rounded-2xl border border-warning/30 bg-warning/10 p-4 flex gap-3 shadow-sm">
             <AlertCircle className="text-warning w-5 h-5 mt-0.5" />
             <div>
               <p className="font-medium">
@@ -361,6 +538,66 @@ export default function Dashboard() {
             </div>
           </section>
         )}
+
+        {/* NOTIFICACOES */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Bell className="w-5 h-5 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <p className="font-semibold">Notificacoes</p>
+              <p className="text-sm text-muted-foreground">
+                Receba alertas quando novas escalas forem criadas.
+              </p>
+              {!pushSupported && (
+                <p className="text-xs text-muted-foreground">
+                  Seu navegador nao suporta notificacoes push.
+                </p>
+              )}
+              {pushPermission === "denied" && (
+                <p className="text-xs text-destructive">
+                  Permissao bloqueada no navegador.
+                </p>
+              )}
+              {pushEnabled && (
+                <p className="text-xs text-muted-foreground">
+                  Notificacoes ativadas neste dispositivo.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={handleTestPush}
+              disabled={!pushEnabled}
+            >
+              Testar notificacao
+            </Button>
+
+            {pushEnabled ? (
+              <Button
+                variant="outline"
+                onClick={handleDisablePush}
+                disabled={pushLoading}
+              >
+                {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Desativar notificacoes
+              </Button>
+            ) : (
+              <Button
+                onClick={handleEnablePush}
+                disabled={!pushSupported || pushLoading || pushEnabled || pushPermission === "denied"}
+                variant={pushEnabled ? "outline" : "default"}
+              >
+                {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {pushEnabled ? "Notificacoes ativadas" : "Ativar notificacoes"}
+              </Button>
+            )}
+          </div>
+        </section>
 
         {/* MINHAS ESCALAS */}
         <section className="space-y-4">
@@ -383,7 +620,7 @@ export default function Dashboard() {
               {mySchedules.map((schedule) => (
                 <div
                   key={schedule.id}
-                  className="rounded-xl border bg-background p-4 flex flex-wrap justify-between gap-4 transition hover:shadow-sm hover:border-primary/30"
+                  className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap justify-between gap-4 transition hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
                 >
                   <div>
                     <p className="font-semibold">{schedule.title}</p>
@@ -422,7 +659,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="py-12 rounded-2xl border border-dashed text-center">
+            <div className="py-12 rounded-2xl border border-dashed border-slate-200 text-center bg-white">
               <p className="font-medium">
                 Nenhuma escala atribuída ainda
               </p>
@@ -440,7 +677,7 @@ export default function Dashboard() {
             Minha indisponibilidade
           </h2>
 
-          <div className="rounded-2xl border bg-background p-4 space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm overflow-hidden">
             {myUnavailability.length > 0 ? (
               <div className="space-y-2">
                 {myUnavailability.map((entry) => (
@@ -559,7 +796,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <div className="py-16 rounded-3xl border border-dashed text-center">
+            <div className="py-16 rounded-3xl border border-dashed border-slate-200 text-center bg-white">
               <p className="font-medium">
                 Nenhum evento encontrado
               </p>
@@ -626,7 +863,7 @@ function SummaryCard({
   bg: string;
 }) {
   return (
-    <Card className="rounded-2xl border">
+    <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <CardContent className="p-4 flex items-center gap-4">
         <div className={`w-12 h-12 rounded-full ${bg} flex items-center justify-center`}>
           {icon}

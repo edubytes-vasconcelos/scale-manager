@@ -164,7 +164,7 @@ export default function Ministries() {
           {ministries.map((ministry) => {
             const Icon = getIcon(ministry.icon);
             return (
-              <Card key={ministry.id} data-testid={`card-ministry-${ministry.id}`}>
+              <Card key={ministry.id} data-testid={`card-ministry-${ministry.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -188,7 +188,7 @@ export default function Ministries() {
           })}
         </div>
       ) : (
-        <Card className="border-dashed">
+        <Card className="border-dashed border-slate-200 bg-white">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-3">
               <Church className="w-7 h-7 text-slate-300" />

@@ -625,6 +625,23 @@ export default function Schedules() {
     return "";
   };
 
+  const notifyNewSchedule = async (count: number) => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) return;
+      await supabase.functions.invoke("send-push", {
+        body: {
+          userId: user.id,
+          title: "Nova escala criada",
+          body: count > 1 ? `Foram criadas ${count} escalas.` : "Uma nova escala foi criada.",
+        },
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   const getMaxEndDate = () => {
     if (!newDate) return "";
     const start = new Date(newDate);
@@ -696,6 +713,8 @@ export default function Schedules() {
       queryClient.invalidateQueries({
         queryKey: ["services", profile.organizationId],
       });
+
+      await notifyNewSchedule(dates.length);
 
       toast({
         title: "Escala criada!",
@@ -1180,6 +1199,8 @@ export default function Schedules() {
         queryKey: ["services", profile.organizationId],
       });
 
+      await notifyNewSchedule(dates.length);
+
       toast({ title: "Confirmado!", description: "Sua presença foi confirmada." });
     } catch (error: any) {
       console.error(error);
@@ -1518,139 +1539,16 @@ export default function Schedules() {
             variant={viewMode === "calendar" ? "default" : "outline"}
             onClick={() => setViewMode("calendar")}
           >
-            <CalendarDays className="w-4 h-4 mr-1" /> Calendário
+            <CalendarDays className="w-4 h-4 mr-1" /> Calendario
           </Button>
 
-          {canManageSchedules && (
-            <Button onClick={() => openQuickCreateDialog()}>
-              <Plus className="w-4 h-4 mr-2" /> Nova Escala
-            </Button>
-          )}
-        </div>
+        {canManageSchedules && (
+          <Button onClick={() => openQuickCreateDialog()}>
+            <Plus className="w-4 h-4 mr-2" /> Nova Escala
+          </Button>
+        )}
       </div>
-
-      {/* Filters Section */}
-      <Card className="mb-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Chips rápidos */}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={quickChip === "myPending" ? "default" : "outline"}
-              onClick={() => applyQuickChip("myPending")}
-              className={`transition-all duration-200 ${
-                quickChip === "myPending" ? "scale-[1.02] shadow-sm" : ""
-              }`}
-            >
-              Minhas pendentes ({chipCounts.myPending})
-            </Button>
-
-            <Button
-              type="button"
-              variant={quickChip === "today" ? "default" : "outline"}
-              onClick={() => applyQuickChip("today")}
-              className={`transition-all duration-200 ${
-                quickChip === "today" ? "scale-[1.02] shadow-sm" : ""
-              }`}
-            >
-              Hoje ({chipCounts.today})
-            </Button>
-
-            <Button
-              type="button"
-              variant={quickChip === "week" ? "default" : "outline"}
-              onClick={() => applyQuickChip("week")}
-              className={`transition-all duration-200 ${
-                quickChip === "week" ? "scale-[1.02] shadow-sm" : ""
-              }`}
-            >
-              Esta semana ({chipCounts.week})
-            </Button>
-
-            {hasActiveFilters && (
-              <Button variant="ghost" onClick={clearFilters} className="ml-auto">
-                Limpar
-              </Button>
-            )}
-          </div>
-
-          {/* Filtros detalhados */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <Input
-              placeholder="Buscar por título..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-            />
-
-            <Select value={filterEventType} onValueChange={setFilterEventType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Tipo de evento" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os tipos</SelectItem>
-                {eventTypes?.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    {type.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Meu status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Meu status (todos)</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="confirmed">Confirmado</SelectItem>
-                <SelectItem value="declined">Recusado</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filterTime} onValueChange={(v) => setFilterTime(v as any)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="future">Futuras</SelectItem>
-                <SelectItem value="past">Passadas</SelectItem>
-                <SelectItem value="all">Todas</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button
-              type="button"
-              variant={filterMineOnly ? "default" : "outline"}
-              onClick={() => setFilterMineOnly((v) => !v)}
-              className="transition-all duration-200"
-            >
-              Minhas escalas
-            </Button>
-
-            <div className="space-y-1 md:col-span-2">
-              <Label>De</Label>
-              <Input
-                type="date"
-                value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1 md:col-span-2">
-              <Label>Até</Label>
-              <Input
-                type="date"
-                value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    </div>
 
       {/* View Mode Toggle */}
       {viewMode === "list" && (
@@ -1682,19 +1580,25 @@ export default function Schedules() {
               const showEventType = !!eventTypeName && eventTypeName !== serviceTitle;
 
               return (
-                <Card key={service.id_uuid}>
+                <Card
+                  key={service.id_uuid}
+                  className="rounded-2xl border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
+                >
+                <div className="h-1 bg-gradient-to-r from-primary/70 via-primary/30 to-transparent" />
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="space-y-2">
                       <CardTitle
-                        className="text-lg font-semibold"
+                        className="text-xl font-semibold tracking-tight"
                         style={readableEventColor ? { color: readableEventColor } : undefined}
                       >
                         {serviceTitle}
                       </CardTitle>
 
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span>{format(parseISO(service.date), "dd/MM/yyyy")}</span>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium">
+                          {format(parseISO(service.date), "dd/MM/yyyy")}
+                        </span>
                         {showEventType && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
                             <span
@@ -1705,7 +1609,7 @@ export default function Schedules() {
                           </span>
                         )}
                       </div>
-                      <div className="mt-2">{getServiceSummaryBadge(service)}</div>
+                      <div>{getServiceSummaryBadge(service)}</div>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -1809,8 +1713,8 @@ export default function Schedules() {
       )}
 
       {viewMode === "calendar" && (
-        <div className="border rounded-xl overflow-hidden">
-          <div className="flex justify-between items-center p-4 border-b">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex justify-between items-center p-4 border-b border-slate-200/80">
             <Button
               size="icon"
               variant="ghost"
@@ -1819,9 +1723,12 @@ export default function Schedules() {
               <ChevronLeft />
             </Button>
 
-            <h3 className="font-semibold capitalize">
-              {format(calendarMonth, "MMMM yyyy", { locale: ptBR })}
-            </h3>
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Calendario</p>
+              <h3 className="text-lg font-semibold capitalize text-slate-900 tracking-tight">
+                {format(calendarMonth, "MMMM yyyy", { locale: ptBR })}
+              </h3>
+            </div>
 
             <Button
               size="icon"
@@ -1832,7 +1739,7 @@ export default function Schedules() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-7 bg-slate-100 border-b">
+          <div className="grid grid-cols-7 bg-slate-50/80 border-b border-slate-200/80">
             {Array.from({ length: 7 }).map((_, idx) => {
               const baseDate = addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), idx);
               const labelShort = format(baseDate, "EEEEE", { locale: ptBR });
@@ -1840,7 +1747,7 @@ export default function Schedules() {
               return (
                 <div
                   key={`weekday-${idx}`}
-                  className="px-1 sm:px-2 py-1 text-[10px] sm:text-[11px] uppercase tracking-wide text-muted-foreground text-center"
+                  className="px-1 sm:px-2 py-2 text-[10px] sm:text-[11px] uppercase tracking-wide text-slate-500 text-center"
                 >
                   <span className="sm:hidden">{labelShort}</span>
                   <span className="hidden sm:inline">{labelLong}</span>
@@ -1860,19 +1767,19 @@ export default function Schedules() {
               return (
                 <div
                   key={idx}
-                  className={`border p-1 sm:p-2 min-h-[72px] sm:min-h-[100px] ${
-                    !isSameMonth(day, calendarMonth) ? "bg-slate-50" : ""
-                  } ${hasSchedules ? "bg-emerald-50/40" : ""} ${
+                  className={`border border-slate-200/80 p-1.5 sm:p-2 min-h-[84px] sm:min-h-[120px] transition-colors ${
+                    !isSameMonth(day, calendarMonth) ? "bg-slate-50/80 text-slate-400" : "bg-white"
+                  } ${hasSchedules ? "bg-emerald-50/30" : ""} ${
                     isSameDay(day, new Date()) ? "ring-1 ring-primary/40 bg-primary/5" : ""
-                  } ${canManageSchedules ? "cursor-pointer hover:bg-slate-50" : ""}`}
+                  } ${canManageSchedules ? "cursor-pointer hover:bg-slate-50/90" : ""}`}
                   onClick={() => handleDayClick(day)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-[10px] sm:text-xs text-right">
+                    <div className="text-[11px] sm:text-xs font-semibold text-slate-700">
                       {format(day, "d")}
                     </div>
                     {hasSchedules && (
-                      <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                      <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
                         {dayServices.length}
                       </span>
                     )}
@@ -1893,14 +1800,14 @@ export default function Schedules() {
                     const eventStyle = eventType?.color
                       ? {
                           borderLeftColor: eventType.color,
-                          backgroundColor: `${eventType.color}1A`,
+                          backgroundColor: `${eventType.color}14`,
                         }
                       : undefined;
 
                     return (
                       <div
                         key={s.id_uuid}
-                        className="group relative text-[10px] sm:text-xs rounded px-1 py-0.5 mt-1 truncate border-l-2"
+                        className="group relative text-[10px] sm:text-xs rounded-md px-2 py-1 mt-1 truncate border border-slate-200/70 bg-white/90 shadow-[0_1px_4px_rgba(15,23,42,0.04)] border-l-2"
                         style={eventStyle}
                         title={getServiceTitle(s)}
                       >
@@ -1919,7 +1826,7 @@ export default function Schedules() {
                           </Button>
                         )}
                         <span
-                          className="block truncate"
+                          className="block truncate font-medium"
                           style={readableEventColor ? { color: readableEventColor } : undefined}
                         >
                           {serviceTitle}
@@ -1988,114 +1895,25 @@ export default function Schedules() {
 
           <div className="space-y-5">
             {isCreateMode ? (
-              <>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Evento
-            </div>
-            <div className="space-y-1">
-              <Label>Data</Label>
-              <Input
-                type="date"
-                value={newDate}
-                onChange={(e) => {
-                  setNewDate(e.target.value);
-                  setRecurrenceEndDate("");
-                }}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Tipo de evento</Label>
-              <Select value={newEventTypeId} onValueChange={setNewEventTypeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {eventTypes?.map((et) => (
-                    <SelectItem key={et.id} value={et.id}>
-                      {et.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="flex-1 h-px bg-border" />
-              <span>ou</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Nome personalizado</Label>
-              <Input
-                placeholder="Ex: Reuniao Especial"
-                value={newCustomName}
-                onChange={(e) => setNewCustomName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2 pt-2 border-t">
-              <div className="flex items-center justify-between">
-                <Label>Recorrencia</Label>
-              </div>
-
-              <RadioGroup
-                value={recurrenceType}
-                onValueChange={(v) => {
-                  setRecurrenceType(v as any);
-                  setRecurrenceEndDate("");
-                }}
-                className="flex gap-4"
-              >
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="none" id="r-none" />
-                  <Label htmlFor="r-none">Unica</Label>
+              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Evento
                 </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="daily" id="r-daily" />
-                  <Label htmlFor="r-daily">Diaria</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="weekly" id="r-weekly" />
-                  <Label htmlFor="r-weekly">Semanal</Label>
-                </div>
-              </RadioGroup>
-
-              {recurrenceType !== "none" && (
                 <div className="space-y-1">
-                  <Label>Ate quando?</Label>
+                  <Label>Data</Label>
                   <Input
                     type="date"
-                    min={getMinEndDate()}
-                    max={getMaxEndDate()}
-                    value={recurrenceEndDate}
-                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                    value={newDate}
+                    onChange={(e) => {
+                      setNewDate(e.target.value);
+                      setRecurrenceEndDate("");
+                    }}
                   />
                 </div>
-              )}
-            </div>
 
-            <div className="flex justify-end">
-              <Button onClick={handleCreateService} disabled={isSavingCreate || !newDate}>
-                Criar
-              </Button>
-            </div>
-
-              </>
-            ) : (
-              <>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Evento
-            </div>
-            {canManageSchedules && (
-              <div className="space-y-3 rounded-md border p-4">
                 <div className="space-y-1">
                   <Label>Tipo de evento</Label>
-                  <Select
-                    value={editEventTypeId}
-                    onValueChange={setEditEventTypeId}
-                  >
+                  <Select value={newEventTypeId} onValueChange={setNewEventTypeId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um tipo" />
                     </SelectTrigger>
@@ -2109,316 +1927,368 @@ export default function Schedules() {
                   </Select>
                 </div>
 
-                {showCustomEventName && (
-                  <div className="space-y-1">
-                    <Label>Nome personalizado</Label>
-                    <Input
-                      placeholder="Ex: Reuniao Especial"
-                      value={editEventTitle}
-                      onChange={(e) => setEditEventTitle(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Deixe em branco para usar o tipo de evento.
-                    </p>
-                  </div>
-                )}
-
-                {isEventDirty && (
-                  <Button
-                    onClick={handleUpdateServiceEvent}
-                    disabled={isSavingEvent}
-                  >
-                    Salvar evento
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {!canManageSchedules && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Voce nao tem permissao para editar o evento.
-              </div>
-            )}
-
-            {/* LISTAGEM ATUAL */}
-            <div className="space-y-5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pessoas</div>
-              <div className="space-y-2">
-                <Label>Voluntarios escalados ({selectedAssignments.volunteers.length})</Label>
-
-                {selectedAssignments.volunteers.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedAssignments.volunteers.map((a, idx) => (
-                      <div
-                        key={`sel-${idx}`}
-                        className="flex items-center justify-between gap-2 rounded-md border p-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {getVolunteerName(a.volunteerId)}
-                          </p>
-                          <div className="mt-1">{getStatusBadge(a.status)}</div>
-                        </div>
-
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-destructive"
-                          onClick={() => handleRemoveVolunteer(a.volunteerId || "")}
-                          disabled={!canManageVolunteers || isSavingAssign}
-                          title="Remover"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic">
-                    Nenhum voluntario adicionado
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Pregadores escalados ({selectedAssignments.preachers.length})</Label>
-
-                {selectedAssignments.preachers.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedAssignments.preachers.map((p, idx) => {
-                      const preacherRecord = preachers?.find(
-                        (preacher) => preacher.id === p.preacherId
-                      );
-                      const preacherName =
-                        preacherRecord?.name || p.name || "-";
-
-                      return (
-                        <div
-                          key={`preacher-${idx}`}
-                          className="flex items-center justify-between gap-2 rounded-md border p-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {preacherName}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Pregador</p>
-                          </div>
-
-                          {canManagePreaching && preacherRecord && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => openEditPreacher(preacherRecord)}
-                                title="Editar"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="text-destructive"
-                                onClick={() => handleRemovePreacher(p.preacherId)}
-                                disabled={isSavingPreacher}
-                                title="Remover"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic">
-                    Nenhum pregador adicionado
-                  </p>
-                )}
-              </div>
-
-              {!canManagePreaching && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Voce nao tem permissao para editar pregadores.
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex-1 h-px bg-border" />
+                  <span>ou</span>
+                  <div className="flex-1 h-px bg-border" />
                 </div>
-              )}
-            </div>
 
-            {!canManageVolunteers && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Voce nao tem permissao para editar voluntarios.
+                <div className="space-y-1">
+                  <Label>Nome personalizado</Label>
+                  <Input
+                    placeholder="Ex: Reuniao Especial"
+                    value={newCustomName}
+                    onChange={(e) => setNewCustomName(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2 border-t pt-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Recorrencia</Label>
+                  </div>
+
+                  <RadioGroup
+                    value={recurrenceType}
+                    onValueChange={(v) => {
+                      setRecurrenceType(v as any);
+                      setRecurrenceEndDate("");
+                    }}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="none" id="r-none" />
+                      <Label htmlFor="r-none">Unica</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="daily" id="r-daily" />
+                      <Label htmlFor="r-daily">Diaria</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="weekly" id="r-weekly" />
+                      <Label htmlFor="r-weekly">Semanal</Label>
+                    </div>
+                  </RadioGroup>
+
+                  {recurrenceType !== "none" && (
+                    <div className="space-y-1">
+                      <Label>Ate quando?</Label>
+                      <Input
+                        type="date"
+                        min={getMinEndDate()}
+                        max={getMaxEndDate()}
+                        value={recurrenceEndDate}
+                        onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleCreateService} disabled={isSavingCreate || !newDate}>
+                    Criar
+                  </Button>
+                </div>
               </div>
-            )}
+            ) : (
+              <>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Evento
+                </div>
+                {canManageSchedules && (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="space-y-1">
+                      <Label>Tipo de evento</Label>
+                      <Select value={editEventTypeId} onValueChange={setEditEventTypeId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eventTypes?.map((et) => (
+                            <SelectItem key={et.id} value={et.id}>
+                              {et.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-            {canManageVolunteers && (
-              <div className="space-y-2 pt-2 border-t">
-                <Label>Adicionar voluntario</Label>
-                <Select
-                  value={selectedVolunteerId}
-                  onValueChange={setSelectedVolunteerId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um voluntario" />
-                  </SelectTrigger>
-                <SelectContent>
-                    {volunteers?.map((v) => {
-                      const unavailabilityEntry = getVolunteerUnavailability(
-                        v.id,
-                        selectedService?.date
-                      );
-                      const isUnavailable = !!unavailabilityEntry;
-                      const reason = unavailabilityEntry?.reason?.trim();
-                      const period = unavailabilityEntry
-                        ? `${format(
-                            parseISO(String(unavailabilityEntry.startDate)),
-                            "dd/MM"
-                          )} - ${format(
-                            parseISO(String(unavailabilityEntry.endDate)),
-                            "dd/MM"
-                          )}`
-                        : "";
+                    {showCustomEventName && (
+                      <div className="space-y-1">
+                        <Label>Nome personalizado</Label>
+                        <Input
+                          placeholder="Ex: Reuniao Especial"
+                          value={editEventTitle}
+                          onChange={(e) => setEditEventTitle(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Deixe em branco para usar o tipo de evento.
+                        </p>
+                      </div>
+                    )}
 
-                      return (
-                        <SelectItem key={v.id} value={v.id} disabled={isUnavailable}>
-                          <div className="flex flex-col">
-                            <span className="text-sm">{v.name}</span>
-                            {isUnavailable && (
-                              <span className="text-xs text-muted-foreground">
-                                Indisponivel ({period}
-                                {reason ? `: ${reason}` : ""})
-                              </span>
-                            )}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                </SelectContent>
-              </Select>
+                    {isEventDirty && (
+                      <Button onClick={handleUpdateServiceEvent} disabled={isSavingEvent}>
+                        Salvar evento
+                      </Button>
+                    )}
+                  </div>
+                )}
 
-                <Button
-                  onClick={handleAddVolunteer}
-                  disabled={isSavingAssign}
-                  className="w-full"
-                >
-                  Adicionar
-                </Button>
-              </div>
-            )}
+                {!canManageSchedules && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Voce nao tem permissao para editar o evento.
+                  </div>
+                )}
 
-            {canManagePreaching && (
-              <div className="space-y-3 pt-2 border-t">
-                <Label>Adicionar pregador</Label>
-                <Input
-                  placeholder="Buscar ou cadastrar pregador"
-                  ref={preacherSearchRef}
-                  value={preacherSearch}
-                  onChange={(e) => setPreacherSearch(e.target.value)}
-                />
-
-                {preacherSearch.trim() && (
+                {/* LISTAGEM ATUAL */}
+                <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Pessoas
+                  </div>
                   <div className="space-y-2">
-                    {filteredPreachers.length > 0 ? (
-                      <div className="max-h-40 overflow-y-auto rounded-md border">
-                        {filteredPreachers.map((p) => (
+                    <Label>
+                      Voluntarios escalados ({selectedAssignments.volunteers.length})
+                    </Label>
+
+                    {selectedAssignments.volunteers.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedAssignments.volunteers.map((a, idx) => (
                           <div
-                            key={p.id}
-                            className="flex items-center justify-between gap-2 px-3 py-2 border-b last:border-b-0"
+                            key={`sel-${idx}`}
+                            className="flex items-center justify-between gap-2 rounded-md border p-2"
                           >
                             <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{p.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {p.type === "interno" ? "Interno" : "Convidado"}
-                                {p.church ? ` • ${p.church}` : ""}
+                              <p className="text-sm font-medium truncate">
+                                {getVolunteerName(a.volunteerId)}
                               </p>
+                              <div className="mt-1">{getStatusBadge(a.status)}</div>
                             </div>
+
                             <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleAddPreacher(p)}
-                              disabled={isSavingPreacher}
+                              size="icon"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => handleRemoveVolunteer(a.volunteerId || "")}
+                              disabled={!canManageVolunteers || isSavingAssign}
+                              title="Remover"
                             >
-                              Adicionar
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Nenhum pregador encontrado. Cadastre abaixo.
+                      <p className="text-sm text-muted-foreground italic">
+                        Nenhum voluntario adicionado
                       </p>
                     )}
                   </div>
-                )}
 
-                <div className="grid gap-2">
-                  <Select
-                    value={preacherType}
-                    onValueChange={(v) => setPreacherType(v as "interno" | "convidado")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tipo de pregador" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="interno">Interno</SelectItem>
-                      <SelectItem value="convidado">Convidado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Label>
+                      Pregadores escalados ({selectedAssignments.preachers.length})
+                    </Label>
 
-                  <Input
-                    placeholder="Igreja (opcional)"
-                    value={preacherChurch}
-                    onChange={(e) => setPreacherChurch(e.target.value)}
-                  />
+                    {selectedAssignments.preachers.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedAssignments.preachers.map((p, idx) => {
+                          const preacherRecord = preachers?.find(
+                            (preacher) => preacher.id === p.preacherId
+                          );
+                          const preacherName = preacherRecord?.name || p.name || "-";
 
-                  <Textarea
-                    placeholder="Observações (opcional)"
-                    value={preacherNotes}
-                    onChange={(e) => setPreacherNotes(e.target.value)}
-                  />
+                          return (
+                            <div
+                              key={`preacher-${idx}`}
+                              className="flex items-center justify-between gap-2 rounded-md border p-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{preacherName}</p>
+                                <p className="text-xs text-muted-foreground">Pregador</p>
+                              </div>
+
+                              {canManagePreaching && preacherRecord && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => openEditPreacher(preacherRecord)}
+                                    title="Editar"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="text-destructive"
+                                    onClick={() => handleRemovePreacher(p.preacherId)}
+                                    disabled={isSavingPreacher}
+                                    title="Remover"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        Nenhum pregador adicionado
+                      </p>
+                    )}
+                  </div>
+
+                  {!canManagePreaching && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Voce nao tem permissao para editar pregadores.
+                    </div>
+                  )}
                 </div>
 
-                <Button
-                  onClick={handleCreatePreacher}
-                  disabled={isSavingPreacher}
-                  className="w-full"
-                >
-                  Cadastrar e adicionar
-                </Button>
-              </div>
-            )}
-          
+                {!canManageVolunteers && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Voce nao tem permissao para editar voluntarios.
+                  </div>
+                )}
+
+                {canManageVolunteers && (
+                  <div className="space-y-2 border-t pt-2">
+                    <Label>Adicionar voluntario</Label>
+                    <Select value={selectedVolunteerId} onValueChange={setSelectedVolunteerId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um voluntario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {volunteers?.map((v) => {
+                          const unavailabilityEntry = getVolunteerUnavailability(
+                            v.id,
+                            selectedService?.date
+                          );
+                          const isUnavailable = !!unavailabilityEntry;
+                          const reason = unavailabilityEntry?.reason?.trim();
+                          const period = unavailabilityEntry
+                            ? `${format(
+                                parseISO(String(unavailabilityEntry.startDate)),
+                                "dd/MM"
+                              )} - ${format(
+                                parseISO(String(unavailabilityEntry.endDate)),
+                                "dd/MM"
+                              )}`
+                            : "";
+
+                          return (
+                            <SelectItem key={v.id} value={v.id} disabled={isUnavailable}>
+                              <div className="flex flex-col">
+                                <span className="text-sm">{v.name}</span>
+                                {isUnavailable && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Indisponivel ({period}
+                                    {reason ? `: ${reason}` : ""})
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      onClick={handleAddVolunteer}
+                      disabled={isSavingAssign}
+                      className="w-full"
+                    >
+                      Adicionar
+                    </Button>
+                  </div>
+                )}
+
+                {canManagePreaching && (
+                  <div className="space-y-3 border-t pt-2">
+                    <Label>Adicionar pregador</Label>
+                    <Input
+                      placeholder="Buscar ou cadastrar pregador"
+                      ref={preacherSearchRef}
+                      value={preacherSearch}
+                      onChange={(e) => setPreacherSearch(e.target.value)}
+                    />
+
+                    {preacherSearch.trim() && (
+                      <div className="space-y-2">
+                        {filteredPreachers.length > 0 ? (
+                          <div className="max-h-40 overflow-y-auto rounded-md border">
+                            {filteredPreachers.map((p) => (
+                              <div
+                                key={p.id}
+                                className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{p.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {p.type === "interno" ? "Interno" : "Convidado"}
+                                    {p.church ? ` • ${p.church}` : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleAddPreacher(p)}
+                                  disabled={isSavingPreacher}
+                                >
+                                  Adicionar
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Nenhum pregador encontrado. Cadastre abaixo.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="grid gap-2">
+                      <Select
+                        value={preacherType}
+                        onValueChange={(v) => setPreacherType(v as "interno" | "convidado")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Tipo de pregador" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="interno">Interno</SelectItem>
+                          <SelectItem value="convidado">Convidado</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <Input
+                        placeholder="Igreja (opcional)"
+                        value={preacherChurch}
+                        onChange={(e) => setPreacherChurch(e.target.value)}
+                      />
+
+                      <Textarea
+                        placeholder="Observações (opcional)"
+                        value={preacherNotes}
+                        onChange={(e) => setPreacherNotes(e.target.value)}
+                      />
+                    </div>
+
+                    <Button
+                      onClick={handleCreatePreacher}
+                      disabled={isSavingPreacher}
+                      className="w-full"
+                    >
+                      Cadastrar e adicionar
+                    </Button>
+                  </div>
+                )}
               </>
             )}
-          </div></DialogContent>
-      </Dialog>
-
-      <Dialog open={conflictDialogOpen} onOpenChange={setConflictDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Conflitos detectados</DialogTitle>
-            <DialogDescription>
-              Alguns voluntários já estão escalados em outras escalas no mesmo dia.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 max-h-72 overflow-y-auto">
-            {conflictDetails.map((item) => (
-              <div key={item.volunteerId} className="rounded-md border p-3">
-                <p className="text-sm font-medium">{item.volunteerName}</p>
-                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                  {item.services.map((title, index) => (
-                    <li key={`${item.volunteerId}-${index}`} className="list-disc ml-4">
-                      {title}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
           </div>
-
-          <DialogFooter>
-            <Button onClick={() => setConflictDialogOpen(false)}>Entendi</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
