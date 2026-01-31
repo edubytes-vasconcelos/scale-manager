@@ -17,7 +17,9 @@ import {
   Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
+import { isPWAInstalled, showInstallPrompt } from "@/lib/pwa";
 
 /* =========================
    TYPES
@@ -135,10 +137,27 @@ export default function AppLayout({
   const { data: profile } = useVolunteerProfile();
   const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
     setLocation("/login");
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isPWAInstalled()) return;
+
+    const handleInstallable = () => {
+      setCanInstall(true);
+    };
+
+    window.addEventListener("pwa-installable", handleInstallable);
+    return () => window.removeEventListener("pwa-installable", handleInstallable);
+  }, []);
+
+  const handleInstallClick = async () => {
+    const installed = await showInstallPrompt();
+    if (installed) setCanInstall(false);
   };
 
   const userRole = profile?.accessLevel as Role | undefined;
@@ -185,9 +204,17 @@ export default function AppLayout({
                 Gestor IASD
               </span>
             </div>
-            <Button size="icon" variant="ghost" onClick={handleSignOut}>
-              <LogOut className="w-5 h-5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {canInstall && (
+                <Button size="sm" variant="outline" onClick={handleInstallClick}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Instalar
+                </Button>
+              )}
+              <Button size="icon" variant="ghost" onClick={handleSignOut}>
+                <LogOut className="w-5 h-5" />
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -300,6 +327,12 @@ export default function AppLayout({
           <main className="flex-1 min-h-screen flex flex-col">
             <header className="hidden lg:flex items-center justify-end px-6 py-3 bg-white border-b border-border sticky top-0 z-30">
               <div className="flex items-center gap-3">
+                {canInstall && (
+                  <Button size="sm" variant="outline" onClick={handleInstallClick}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Instalar app
+                  </Button>
+                )}
                 <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
                   {getInitials(profile?.name)}
                 </div>
