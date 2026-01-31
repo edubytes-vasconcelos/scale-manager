@@ -17,6 +17,16 @@ export default function Onboarding() {
   const { signOut, refreshVolunteerProfile, user } = useAuth();
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (view !== "main") return;
+    const hasJoinHint = localStorage.getItem("onboarding:join-code") === "1";
+    const hasPhone = !!user?.user_metadata?.phone;
+    if (hasJoinHint || hasPhone) {
+      setView("join-with-code");
+      localStorage.removeItem("onboarding:join-code");
+    }
+  }, [view, user]);
+
   const handleJoinWithCode = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -301,12 +311,3 @@ export default function Onboarding() {
     </div>
   );
 }
-  useEffect(() => {
-    if (view !== "main") return;
-    const hasJoinHint = localStorage.getItem("onboarding:join-code") === "1";
-    const hasPhone = !!user?.user_metadata?.phone;
-    if (hasJoinHint || hasPhone) {
-      setView("join-with-code");
-      localStorage.removeItem("onboarding:join-code");
-    }
-  }, [view, user]);

@@ -112,6 +112,16 @@ function Breadcrumbs({ location }: { location: string }) {
   );
 }
 
+function getInitials(name?: string | null) {
+  if (!name) return "U";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
 /* =========================
    LAYOUT
 ========================= */
@@ -288,6 +298,26 @@ export default function AppLayout({
 
           {/* MAIN */}
           <main className="flex-1 min-h-screen flex flex-col">
+            <header className="hidden lg:flex items-center justify-between px-6 py-3 bg-white border-b border-border sticky top-0 z-30">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  Olá, {profile?.name || "Voluntário"}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                  {getInitials(profile?.name)}
+                </div>
+                <Button
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sair
+                </Button>
+              </div>
+            </header>
             <Breadcrumbs location={location} />
             <div className="flex-1">{children}</div>
           </main>
