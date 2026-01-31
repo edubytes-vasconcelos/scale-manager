@@ -77,6 +77,9 @@ export default function ForgotPassword() {
               <p className="text-sm text-muted-foreground mb-6">
                 Se usar email corporativo, evite abrir em pré-visualização.
               </p>
+              <p className="text-xs text-muted-foreground mb-6">
+                O link é válido por tempo limitado (aprox. 1 hora).
+              </p>
               <div className="space-y-3">
                 <Button
                   variant="outline"
@@ -107,10 +110,13 @@ export default function ForgotPassword() {
                 <h1 className="text-2xl font-bold text-foreground mb-2 font-display">
                   Recuperar Senha
                 </h1>
-                <p className="text-muted-foreground text-sm">
-                  Digite seu email para receber um link de recuperação
-                </p>
-              </div>
+              <p className="text-muted-foreground text-sm">
+                Digite seu email para receber um link de recuperação
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                O link costuma expirar em cerca de 1 hora. Verifique também a pasta de spam.
+              </p>
+            </div>
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">

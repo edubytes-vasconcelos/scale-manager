@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useVolunteerProfile, useMinistries, useCreateMinistry, useUpdateMinistry } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -50,9 +50,19 @@ export default function Ministries() {
     name: "",
     icon: "church",
   });
+  const [searchTerm, setSearchTerm] = useState("");
 
   const isSaving = createMinistry.isPending || updateMinistry.isPending;
   const canSubmit = !!profile?.organizationId && !isSaving;
+
+  const filteredMinistries = useMemo(() => {
+    const list = ministries || [];
+    const term = searchTerm.trim().toLowerCase();
+    const filtered = term
+      ? list.filter((m) => m.name.toLowerCase().includes(term))
+      : list;
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  }, [ministries, searchTerm]);
 
   const getIcon = (iconName: string | null) => {
     if (!iconName) return Church;
@@ -139,8 +149,14 @@ export default function Ministries() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Input
+            placeholder="Buscar ministério..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-56"
+          />
           <Badge variant="outline" className="text-sm">
-            {ministries?.length || 0} ministérios
+            {filteredMinistries.length} ministérios
           </Badge>
           <Button 
             onClick={openCreateDialog} 
@@ -159,9 +175,9 @@ export default function Ministries() {
             <div key={i} className="h-24 rounded-xl bg-slate-100 animate-pulse" />
           ))}
         </div>
-      ) : ministries && ministries.length > 0 ? (
+      ) : filteredMinistries && filteredMinistries.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ministries.map((ministry) => {
+          {filteredMinistries.map((ministry) => {
             const Icon = getIcon(ministry.icon);
             return (
               <Card key={ministry.id} data-testid={`card-ministry-${ministry.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
@@ -194,7 +210,9 @@ export default function Ministries() {
               <Church className="w-7 h-7 text-slate-300" />
             </div>
             <p className="text-base font-medium text-foreground">Nenhum ministério encontrado</p>
-            <p className="text-muted-foreground text-sm">Adicione ministérios à sua organização.</p>
+            <p className="text-muted-foreground text-sm">
+              {searchTerm ? "Ajuste a busca para ver outros resultados." : "Adicione ministérios à sua organização."}
+            </p>
           </CardContent>
         </Card>
       )}

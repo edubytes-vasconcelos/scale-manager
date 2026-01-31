@@ -298,12 +298,7 @@ export default function AppLayout({
 
           {/* MAIN */}
           <main className="flex-1 min-h-screen flex flex-col">
-            <header className="hidden lg:flex items-center justify-between px-6 py-3 bg-white border-b border-border sticky top-0 z-30">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  Olá, {profile?.name || "Voluntário"}
-                </span>
-              </div>
+            <header className="hidden lg:flex items-center justify-end px-6 py-3 bg-white border-b border-border sticky top-0 z-30">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
                   {getInitials(profile?.name)}

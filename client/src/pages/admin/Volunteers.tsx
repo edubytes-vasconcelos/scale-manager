@@ -30,6 +30,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Users,
@@ -155,6 +162,9 @@ export default function Volunteers() {
   const [unavailabilityStart, setUnavailabilityStart] = useState("");
   const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
   const [unavailabilityReason, setUnavailabilityReason] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterAccessLevel, setFilterAccessLevel] = useState("all");
+  const [filterMinistry, setFilterMinistry] = useState("all");
 
   const currentUnavailability = useMemo(() => {
     if (!currentVolunteer?.id) return [];
@@ -162,6 +172,27 @@ export default function Volunteers() {
       (entry) => entry.volunteerId === currentVolunteer.id
     );
   }, [unavailability, currentVolunteer?.id]);
+
+  const filteredVolunteers = useMemo(() => {
+    const list = visibleVolunteers || [];
+    const term = searchTerm.trim().toLowerCase();
+    return list.filter((vol) => {
+      if (filterAccessLevel !== "all" && vol.accessLevel !== filterAccessLevel) {
+        return false;
+      }
+
+      if (filterMinistry !== "all") {
+        const hasMinistry = vol.ministryAssignments?.some(
+          (a) => a.ministryId === filterMinistry
+        );
+        if (!hasMinistry) return false;
+      }
+
+      if (!term) return true;
+      const haystack = `${vol.name} ${vol.email || ""} ${vol.whatsapp || ""}`.toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [visibleVolunteers, searchTerm, filterAccessLevel, filterMinistry]);
 
   /* =========================
      DELETE STATE
@@ -466,12 +497,56 @@ const safeAssignments = isAdmin
         </div>
       )}
 
-      {!isLoading && (!visibleVolunteers || visibleVolunteers.length === 0) ? (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Input
+            placeholder="Buscar por nome, email ou WhatsApp"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-64"
+          />
+          <Select value={filterAccessLevel} onValueChange={setFilterAccessLevel}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Nível" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="leader">Líder</SelectItem>
+              <SelectItem value="volunteer">Voluntário</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterMinistry} onValueChange={setFilterMinistry}>
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="Ministério" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os ministérios</SelectItem>
+              {availableMinistries?.map((ministry) => (
+                <SelectItem key={ministry.id} value={ministry.id}>
+                  {ministry.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Badge variant="outline" className="text-xs">
+          {filteredVolunteers.length} voluntários
+        </Badge>
+      </div>
+
+      {!isLoading && (!filteredVolunteers || filteredVolunteers.length === 0) ? (
         <Card className="border-dashed border-slate-200 bg-white">
           <CardContent className="py-8 text-center space-y-3">
-            <p className="font-medium">Nenhum voluntário cadastrado</p>
+            <p className="font-medium">
+              {searchTerm || filterAccessLevel !== "all" || filterMinistry !== "all"
+                ? "Nenhum voluntário encontrado"
+                : "Nenhum voluntário cadastrado"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              Cadastre o primeiro voluntário para começar a montar as escalas.
+              {searchTerm || filterAccessLevel !== "all" || filterMinistry !== "all"
+                ? "Tente ajustar os filtros para ver mais resultados."
+                : "Cadastre o primeiro voluntário para começar a montar as escalas."}
             </p>
             {canManageVolunteerRecords && (
               <Button onClick={openAddForm}>
@@ -483,7 +558,7 @@ const safeAssignments = isAdmin
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleVolunteers?.map((v) => {
+          {filteredVolunteers?.map((v) => {
           const isActive = !!v.authUserId;
           const isVolunteerLeader = v.ministryAssignments?.some(
             (a) => a.isLeader

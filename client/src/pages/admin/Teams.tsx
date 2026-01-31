@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useVolunteerProfile, useTeams, useVolunteers, useCreateTeam, useUpdateTeam, useDeleteTeam } from "@/hooks/use-data";
+import { useMemo, useState } from "react";
+import { useVolunteerProfile, useTeams, useVolunteers, useCreateTeam, useUpdateTeam, useDeleteTeam, useServices } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { UsersRound, User, Plus, Loader2, Trash2, Pencil } from "lucide-react";
+import { parseISO, isAfter } from "date-fns";
 import type { Team } from "@shared/schema";
 
 export default function Teams() {
   const { data: profile, isLoading: profileLoading } = useVolunteerProfile();
   const { data: teams, isLoading } = useTeams(profile?.organizationId);
   const { data: volunteers } = useVolunteers(profile?.organizationId);
+  const { data: services } = useServices(profile?.organizationId);
   const createTeam = useCreateTeam();
   const updateTeam = useUpdateTeam();
   const deleteTeam = useDeleteTeam();
@@ -36,6 +38,26 @@ export default function Teams() {
     return memberIds
       .map(id => volunteers.find(v => v.id === id)?.name)
       .filter(Boolean);
+  };
+
+  const futureServices = useMemo(() => {
+    if (!services) return [];
+    const today = new Date();
+    return services.filter((service) => !isAfter(today, parseISO(service.date)));
+  }, [services]);
+
+  const getServiceAssignments = (assignments: any) => {
+    if (Array.isArray(assignments)) return assignments;
+    if (assignments && typeof assignments === "object" && Array.isArray(assignments.volunteers)) {
+      return assignments.volunteers;
+    }
+    return [];
+  };
+
+  const getTeamUsageCount = (teamId: string) => {
+    return futureServices.filter((service) =>
+      getServiceAssignments(service.assignments).some((a: any) => a.teamId === teamId)
+    ).length;
   };
 
   const handleMemberToggle = (volunteerId: string) => {
@@ -169,6 +191,7 @@ export default function Teams() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {teams.map((team) => {
             const memberNames = getMemberNames(team.memberIds);
+            const usageCount = getTeamUsageCount(team.id);
             return (
               <Card key={team.id} data-testid={`card-team-${team.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
                 <CardHeader className="pb-3">
@@ -177,20 +200,25 @@ export default function Teams() {
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                         <UsersRound className="w-5 h-5 text-primary" />
                       </div>
-                      <div>
-                        <CardTitle className="text-base">{team.name}</CardTitle>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {memberNames.length} membros
-                        </p>
+                        <div>
+                          <CardTitle className="text-base">{team.name}</CardTitle>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {memberNames.length} membros
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => openEditDialog(team)}
-                        data-testid={`button-edit-team-${team.id}`}
-                      >
+                      <div className="flex items-center gap-1">
+                        {usageCount > 0 && (
+                          <Badge variant="outline" className="text-[10px]">
+                            {usageCount} escala(s) futuras
+                          </Badge>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openEditDialog(team)}
+                          data-testid={`button-edit-team-${team.id}`}
+                        >
                         <Pencil className="w-4 h-4" />
                       </Button>
                       <Button

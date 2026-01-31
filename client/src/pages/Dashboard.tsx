@@ -70,6 +70,7 @@ export default function Dashboard() {
   const [unavailabilityReason, setUnavailabilityReason] = useState("");
   const [showNotifications, setShowNotifications] = useState(true);
   const [showUnavailabilitySection, setShowUnavailabilitySection] = useState(true);
+  const [scheduleFilter, setScheduleFilter] = useState<"all" | "pending" | "confirmed">("all");
 
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -78,6 +79,13 @@ export default function Dashboard() {
   const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
+
+  const getMyStatus = (service: any) => {
+    if (!service.assignments || !volunteer?.id) return null;
+    const { volunteers } = normalizeAssignments(service.assignments);
+    const assignment = volunteers.find((a: any) => a.volunteerId === volunteer.id);
+    return assignment?.status || null;
+  };
 
   const pendingSchedules = useMemo(() => {
     if (!mySchedules || !volunteer?.id) return [];
@@ -96,6 +104,23 @@ export default function Dashboard() {
       return assignment?.status === "confirmed";
     });
   }, [mySchedules, volunteer?.id]);
+
+  const nextWeekSchedules = useMemo(() => {
+    if (!mySchedules) return [];
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = addDays(start, 7);
+    return mySchedules.filter((schedule) => {
+      const date = parseISO(schedule.date);
+      return date >= start && date <= end;
+    });
+  }, [mySchedules]);
+
+  const nextWeekStats = useMemo(() => {
+    const pending = nextWeekSchedules.filter((s) => getMyStatus(s) === "pending").length;
+    const confirmed = nextWeekSchedules.filter((s) => getMyStatus(s) === "confirmed").length;
+    return { pending, confirmed };
+  }, [nextWeekSchedules, volunteer?.id]);
 
   const myUnavailability = useMemo(() => {
     if (!unavailability || !volunteer?.id) return [];
@@ -121,13 +146,6 @@ export default function Dashboard() {
       isAfter(parseISO(service.date), addDays(today, -1))
     );
   }, [services]);
-
-  const getMyStatus = (service: any) => {
-    if (!service.assignments || !volunteer?.id) return null;
-    const { volunteers } = normalizeAssignments(service.assignments);
-    const assignment = volunteers.find((a: any) => a.volunteerId === volunteer.id);
-    return assignment?.status || null;
-  };
 
   const handleConfirm = async (
     serviceId: string,
@@ -459,6 +477,11 @@ export default function Dashboard() {
     return null;
   };
 
+  const handleStartDateChange = (value: string) => {
+    setUnavailabilityStart(value);
+    if (!unavailabilityEnd) setUnavailabilityEnd(value);
+  };
+
   const formatScheduleDate = (dateString: string) => {
     const date = parseISO(dateString);
     if (isToday(date)) {
@@ -469,6 +492,21 @@ export default function Dashboard() {
     }
     return format(date, "EEEE, d 'de' MMMM", { locale: ptBR });
   };
+
+  const filteredSchedules = useMemo(() => {
+    if (!mySchedules) return [];
+    if (scheduleFilter === "pending") {
+      return mySchedules.filter((s) => getMyStatus(s) === "pending");
+    }
+    if (scheduleFilter === "confirmed") {
+      return mySchedules.filter((s) => getMyStatus(s) === "confirmed");
+    }
+    return mySchedules;
+  }, [mySchedules, scheduleFilter, volunteer?.id]);
+
+  const nextScheduleEventType = nextSchedule
+    ? eventTypes?.find((e) => e.id === nextSchedule.eventTypeId)
+    : null;
 
   return (
     <AppLayout>
@@ -504,18 +542,22 @@ export default function Dashboard() {
         {/* RESUMO */}
         <section className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="warning">
-              <Clock className="w-3.5 h-3.5 mr-1" />
-              Pendentes {pendingSchedules.length}
-            </Badge>
-            <Badge variant="success">
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-              Confirmadas {confirmedSchedules.length}
-            </Badge>
-            <Badge variant="info">
-              <CalendarDays className="w-3.5 h-3.5 mr-1" />
-              Total {mySchedules?.length || 0}
-            </Badge>
+            {mySchedules && mySchedules.length > 0 ? (
+              <>
+                <Badge variant="warning">
+                  <Clock className="w-3.5 h-3.5 mr-1" />
+                  Pendentes {pendingSchedules.length}
+                </Badge>
+                <Badge variant="success">
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                  Confirmadas {confirmedSchedules.length}
+                </Badge>
+                <Badge variant="info">
+                  <CalendarDays className="w-3.5 h-3.5 mr-1" />
+                  Total {mySchedules.length}
+                </Badge>
+              </>
+            ) : null}
           </div>
 
           {pendingSchedules.length > 0 && (
@@ -524,6 +566,19 @@ export default function Dashboard() {
             </Button>
           )}
         </section>
+
+        {nextWeekSchedules.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Próximos 7 dias:{" "}
+            <span className="font-medium text-foreground">
+              {nextWeekStats.pending} pendente(s)
+            </span>{" "}
+            •{" "}
+            <span className="font-medium text-foreground">
+              {nextWeekStats.confirmed} confirmada(s)
+            </span>
+          </div>
+        )}
 
         {nextSchedule && (
           <section>
@@ -539,6 +594,11 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground">
                     {formatScheduleDate(nextSchedule.date)}
                   </p>
+                  {nextScheduleEventType?.name && (
+                    <p className="text-xs text-muted-foreground">
+                      {nextScheduleEventType.name}
+                    </p>
+                  )}
                 </div>
                 {getStatusBadge(nextSchedule)}
               </CardContent>
@@ -562,30 +622,31 @@ export default function Dashboard() {
         )}
 
         {/* ALERTAS */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Bell className="w-5 h-5 text-primary" />
+        {pushSupported && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-semibold">Alertas</p>
+                  <p className="text-sm text-muted-foreground">
+                    Receba avisos quando novas escalas forem criadas.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="font-semibold">Alertas</p>
-                <p className="text-sm text-muted-foreground">
-                  Receba avisos quando novas escalas forem criadas.
-                </p>
-              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowNotifications((prev) => !prev)}
+              >
+                {showNotifications ? "Ocultar" : "Mostrar"}
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowNotifications((prev) => !prev)}
-            >
-              {showNotifications ? "Ocultar" : "Mostrar"}
-            </Button>
-          </div>
 
-          {showNotifications && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+            {showNotifications && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
               <div className="space-y-1 text-sm text-muted-foreground">
                 {!pushSupported && (
                   <p>Seu navegador não suporta notificações push.</p>
@@ -625,16 +686,42 @@ export default function Dashboard() {
                   </Button>
                 )}
               </div>
-            </div>
-          )}
-        </section>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* MINHAS ESCALAS */}
         <section className="space-y-4">
-          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <ClipboardCheck className="w-5 h-5 text-primary" />
-            Minhas Escalas
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-primary" />
+              Minhas Escalas
+            </h2>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={scheduleFilter === "all" ? "default" : "outline"}
+                onClick={() => setScheduleFilter("all")}
+              >
+                Todas
+              </Button>
+              <Button
+                size="sm"
+                variant={scheduleFilter === "pending" ? "default" : "outline"}
+                onClick={() => setScheduleFilter("pending")}
+              >
+                Pendentes
+              </Button>
+              <Button
+                size="sm"
+                variant={scheduleFilter === "confirmed" ? "default" : "outline"}
+                onClick={() => setScheduleFilter("confirmed")}
+              >
+                Confirmadas
+              </Button>
+            </div>
+          </div>
 
           {loadingMySchedules ? (
             <div className="space-y-3">
@@ -645,15 +732,32 @@ export default function Dashboard() {
                 />
               ))}
             </div>
-          ) : mySchedules && mySchedules.length > 0 ? (
+          ) : filteredSchedules && filteredSchedules.length > 0 ? (
             <div className="space-y-3">
-              {mySchedules.map((schedule) => (
+              {filteredSchedules.map((schedule) => {
+                const eventType = eventTypes?.find(
+                  (type) => type.id === schedule.eventTypeId
+                );
+                return (
                 <div
                   key={schedule.id}
                   className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap justify-between gap-4 transition hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
                 >
                   <div>
-                    <p className="font-semibold">{schedule.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold">{schedule.title}</p>
+                      {eventType?.name && (
+                        <Badge
+                          variant="outline"
+                          style={{
+                            borderColor: eventType.color || undefined,
+                            color: eventType.color || undefined,
+                          }}
+                        >
+                          {eventType.name}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       {formatScheduleDate(schedule.date)}
                     </p>
@@ -684,7 +788,7 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             <div className="py-12 rounded-2xl border border-dashed border-slate-200 text-center bg-white">
@@ -762,7 +866,7 @@ export default function Dashboard() {
                 <Input
                   type="date"
                   value={unavailabilityStart}
-                  onChange={(e) => setUnavailabilityStart(e.target.value)}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                 />
               </div>
               <div className="space-y-1">

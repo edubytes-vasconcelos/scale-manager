@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useVolunteerProfile, useEventTypes, useCreateEventType, useUpdateEventType } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,7 @@ export default function EventTypes() {
     color: "#3b82f6",
   });
   const [customColor, setCustomColor] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const isSaving = createEventType.isPending || updateEventType.isPending;
   const canSubmit = canManageEventTypes && !!profile?.organizationId && !isSaving;
@@ -95,6 +96,15 @@ export default function EventTypes() {
     !!colorOptions.find((option) => option.value === value);
   const resolvedCustomColor =
     normalizeHex(customColor) || (!isPresetColor(formData.color) ? formData.color : "");
+
+  const filteredEventTypes = useMemo(() => {
+    const list = eventTypes || [];
+    const term = searchTerm.trim().toLowerCase();
+    const filtered = term
+      ? list.filter((et) => et.name.toLowerCase().includes(term))
+      : list;
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  }, [eventTypes, searchTerm]);
 
   const openCreateDialog = () => {
     setFormMode("create");
@@ -220,8 +230,14 @@ export default function EventTypes() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Input
+            placeholder="Buscar tipo..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-48"
+          />
           <Badge variant="outline" className="text-sm">
-            {eventTypes?.length || 0} tipos
+            {filteredEventTypes.length} tipos
           </Badge>
           <Button 
             onClick={openCreateDialog} 
@@ -246,9 +262,9 @@ export default function EventTypes() {
             <div key={i} className="h-24 rounded-xl bg-slate-100 animate-pulse" />
           ))}
         </div>
-      ) : eventTypes && eventTypes.length > 0 ? (
+      ) : filteredEventTypes && filteredEventTypes.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {eventTypes.map((eventType) => (
+          {filteredEventTypes.map((eventType) => (
             <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-3">
@@ -303,7 +319,9 @@ export default function EventTypes() {
               <Calendar className="w-7 h-7 text-slate-300" />
             </div>
             <p className="text-base font-medium text-foreground">Nenhum tipo de evento encontrado</p>
-            <p className="text-muted-foreground text-sm">Adicione tipos de evento à sua organização.</p>
+            <p className="text-muted-foreground text-sm">
+              {searchTerm ? "Ajuste a busca para ver outros resultados." : "Adicione tipos de evento à sua organização."}
+            </p>
           </CardContent>
         </Card>
       )}
