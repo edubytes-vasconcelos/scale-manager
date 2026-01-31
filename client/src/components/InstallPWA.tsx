@@ -13,8 +13,10 @@ export default function InstallPWA() {
     const handleInstallable = () => {
       setCanInstall(true);
       setTimeout(() => {
-        const dismissed = localStorage.getItem('pwa-banner-dismissed');
-        if (!dismissed) {
+        const dismissedAt = localStorage.getItem('pwa-banner-dismissed-at');
+        const dismissedRecently =
+          dismissedAt && Date.now() - Number(dismissedAt) < 7 * 24 * 60 * 60 * 1000;
+        if (!dismissedRecently) {
           setShowBanner(true);
         }
       }, 30000);
@@ -34,7 +36,7 @@ export default function InstallPWA() {
 
   const dismiss = () => {
     setShowBanner(false);
-    localStorage.setItem('pwa-banner-dismissed', 'true');
+    localStorage.setItem('pwa-banner-dismissed-at', Date.now().toString());
   };
 
   if (!canInstall || !showBanner) return null;
