@@ -37,7 +37,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { format, isAfter, addDays, parseISO } from "date-fns";
+import { format, isAfter, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
@@ -68,6 +68,8 @@ export default function Dashboard() {
   const [unavailabilityStart, setUnavailabilityStart] = useState("");
   const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
   const [unavailabilityReason, setUnavailabilityReason] = useState("");
+  const [showNotifications, setShowNotifications] = useState(true);
+  const [showUnavailabilitySection, setShowUnavailabilitySection] = useState(true);
 
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -457,6 +459,17 @@ export default function Dashboard() {
     return null;
   };
 
+  const formatScheduleDate = (dateString: string) => {
+    const date = parseISO(dateString);
+    if (isToday(date)) {
+      return `Hoje, ${format(date, "dd/MM", { locale: ptBR })}`;
+    }
+    if (isTomorrow(date)) {
+      return `Amanhã, ${format(date, "dd/MM", { locale: ptBR })}`;
+    }
+    return format(date, "EEEE, d 'de' MMMM", { locale: ptBR });
+  };
+
   return (
     <AppLayout>
       <div className="p-6 lg:p-8 space-y-8">
@@ -472,10 +485,6 @@ export default function Dashboard() {
                 Olá, {loadingProfile ? "..." : firstName}
               </h1>
               <div className="flex flex-wrap gap-3 text-xs md:text-sm opacity-90">
-                <span className="flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  {volunteer?.name || "—"}
-                </span>
                 <span className="flex items-center gap-2">
                   <Building2 className="w-4 h-4" />
                   {volunteer?.organization?.name || "—"}
@@ -493,43 +502,49 @@ export default function Dashboard() {
         </section>
 
         {/* RESUMO */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard
-            icon={<Clock className="text-warning w-6 h-6" />}
-            label="Pendentes"
-            value={pendingSchedules.length}
-            bg="bg-warning/10"
-          />
-          <SummaryCard
-            icon={<CheckCircle2 className="text-success w-6 h-6" />}
-            label="Confirmadas"
-            value={confirmedSchedules.length}
-            bg="bg-success/10"
-          />
-          <SummaryCard
-            icon={<CalendarDays className="text-info w-6 h-6" />}
-            label="Total"
-            value={mySchedules?.length || 0}
-            bg="bg-info/10"
-          />
-          {nextSchedule && (
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-primary uppercase">
-                  Próximo compromisso
-                </p>
-                <p className="font-semibold truncate">
-                  {nextSchedule.title}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {format(parseISO(nextSchedule.date), "d 'de' MMM", {
-                    locale: ptBR,
-                  })}
-                </p>
-              </CardContent>
-            </Card>
+        <section className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="warning">
+              <Clock className="w-3.5 h-3.5 mr-1" />
+              Pendentes {pendingSchedules.length}
+            </Badge>
+            <Badge variant="success">
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+              Confirmadas {confirmedSchedules.length}
+            </Badge>
+            <Badge variant="info">
+              <CalendarDays className="w-3.5 h-3.5 mr-1" />
+              Total {mySchedules?.length || 0}
+            </Badge>
+          </div>
+
+          {pendingSchedules.length > 0 && (
+            <Button size="sm" onClick={() => setSelectedScheduleId(pendingSchedules[0].id)}>
+              Confirmar escalas
+            </Button>
           )}
         </section>
+
+        {nextSchedule && (
+          <section>
+            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-primary uppercase">
+                    Próximo compromisso
+                  </p>
+                  <p className="font-semibold truncate">
+                    {nextSchedule.title}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatScheduleDate(nextSchedule.date)}
+                  </p>
+                </div>
+                {getStatusBadge(nextSchedule)}
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
         {/* ALERTA */}
         {pendingSchedules.length > 0 && (
@@ -546,64 +561,72 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* NOTIFICACOES */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <Bell className="w-5 h-5 text-primary" />
+        {/* ALERTAS */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bell className="w-5 h-5 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold">Alertas</p>
+                <p className="text-sm text-muted-foreground">
+                  Receba avisos quando novas escalas forem criadas.
+                </p>
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="font-semibold">Notificacoes</p>
-              <p className="text-sm text-muted-foreground">
-                Receba alertas quando novas escalas forem criadas.
-              </p>
-              {!pushSupported && (
-                <p className="text-xs text-muted-foreground">
-                  Seu navegador nao suporta notificacoes push.
-                </p>
-              )}
-              {pushPermission === "denied" && (
-                <p className="text-xs text-destructive">
-                  Permissao bloqueada no navegador.
-                </p>
-              )}
-              {pushEnabled && (
-                <p className="text-xs text-muted-foreground">
-                  Notificacoes ativadas neste dispositivo.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
             <Button
-              variant="outline"
-              onClick={handleTestPush}
-              disabled={!pushEnabled}
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowNotifications((prev) => !prev)}
             >
-              Testar notificacao
+              {showNotifications ? "Ocultar" : "Mostrar"}
             </Button>
-
-            {pushEnabled ? (
-              <Button
-                variant="outline"
-                onClick={handleDisablePush}
-                disabled={pushLoading}
-              >
-                {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Desativar notificacoes
-              </Button>
-            ) : (
-              <Button
-                onClick={handleEnablePush}
-                disabled={!pushSupported || pushLoading || pushEnabled || pushPermission === "denied"}
-                variant={pushEnabled ? "outline" : "default"}
-              >
-                {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {pushEnabled ? "Notificacoes ativadas" : "Ativar notificacoes"}
-              </Button>
-            )}
           </div>
+
+          {showNotifications && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1 text-sm text-muted-foreground">
+                {!pushSupported && (
+                  <p>Seu navegador não suporta notificações push.</p>
+                )}
+                {pushPermission === "denied" && (
+                  <p className="text-destructive">Permissão bloqueada no navegador.</p>
+                )}
+                {pushEnabled && <p>Notificações ativadas neste dispositivo.</p>}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleTestPush}
+                  disabled={!pushEnabled}
+                >
+                  Testar alerta
+                </Button>
+
+                {pushEnabled ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleDisablePush}
+                    disabled={pushLoading}
+                  >
+                    {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Desativar alertas
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleEnablePush}
+                    disabled={!pushSupported || pushLoading || pushEnabled || pushPermission === "denied"}
+                    variant={pushEnabled ? "outline" : "default"}
+                  >
+                    {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {pushEnabled ? "Alertas ativados" : "Ativar alertas"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* MINHAS ESCALAS */}
@@ -632,9 +655,7 @@ export default function Dashboard() {
                   <div>
                     <p className="font-semibold">{schedule.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(parseISO(schedule.date), "EEEE, d 'de' MMMM", {
-                        locale: ptBR,
-                      })}
+                      {formatScheduleDate(schedule.date)}
                     </p>
                   </div>
 
@@ -679,12 +700,22 @@ export default function Dashboard() {
 
         {/* MINHA INDISPONIBILIDADE */}
         <section className="space-y-4">
-          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            Minha indisponibilidade
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Minha indisponibilidade
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowUnavailabilitySection((prev) => !prev)}
+            >
+              {showUnavailabilitySection ? "Ocultar" : "Mostrar"}
+            </Button>
+          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm overflow-hidden">
+          {showUnavailabilitySection && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm overflow-hidden">
             {myUnavailability.length > 0 ? (
               <div className="space-y-2">
                 {myUnavailability.map((entry) => (
@@ -764,7 +795,8 @@ export default function Dashboard() {
                 Adicionar indisponibilidade
               </Button>
             </div>
-          </div>
+            </div>
+          )}
         </section>
 
         {/* SERVIÇOS */}
