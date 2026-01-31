@@ -203,6 +203,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!whatsappSent || codeExpiresIn !== 0) return;
+    if (authMethod !== "whatsapp" || session) return;
     setWhatsappSent(false);
     setWhatsappCode("");
     setWhatsappCountdown(0);
