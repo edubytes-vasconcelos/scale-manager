@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -466,6 +467,17 @@ export default function Schedules() {
     quickChip !== "none"
   );
 
+  const activeFiltersCount = [
+    filterSearch.trim(),
+    filterMineOnly,
+    filterStatus !== "all",
+    filterTime !== "future",
+    filterDateFrom,
+    filterDateTo,
+    filterEventType !== "all",
+    quickChip !== "none",
+  ].filter(Boolean).length;
+
   const applyQuickChip = (chip: "myPending" | "today" | "week") => {
     // toggle
     if (quickChip === chip) {
@@ -527,8 +539,25 @@ export default function Schedules() {
 
       // 🔍 busca por texto (título)
       if (filterSearch.trim()) {
-        const text = getServiceTitle(service).toLowerCase();
-        if (!text.includes(filterSearch.trim().toLowerCase())) return false;
+        const searchTerm = normalizeSearch(filterSearch);
+        const title = normalizeSearch(getServiceTitle(service));
+        const eventTypeName =
+          eventTypes?.find((e) => e.id === service.eventTypeId)?.name || "";
+        const eventTypeText = normalizeSearch(eventTypeName);
+        const { preachers } = getNormalizedAssignments(service);
+
+        const matchesTitle = title.includes(searchTerm);
+        const matchesEventType = eventTypeText.includes(searchTerm);
+        const matchesVolunteer = assignments.some((a) =>
+          normalizeSearch(getVolunteerName(a.volunteerId)).includes(searchTerm)
+        );
+        const matchesPreacher = preachers.some((p) => {
+          const name = getPreacherName(p.preacherId) || p.name || "";
+          return normalizeSearch(name).includes(searchTerm);
+        });
+
+        if (!matchesTitle && !matchesEventType && !matchesVolunteer && !matchesPreacher)
+          return false;
       }
 
       // 🏷️ tipo de evento
@@ -1547,8 +1576,148 @@ export default function Schedules() {
             <Plus className="w-4 h-4 mr-2" /> Nova Escala
           </Button>
         )}
+        </div>
       </div>
-    </div>
+
+      {viewMode === "list" && (
+        <Card className="border-slate-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Filtros</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={quickChip === "myPending" ? "default" : "outline"}
+                onClick={() => applyQuickChip("myPending")}
+              >
+                Minhas pendentes ({chipCounts.myPending})
+              </Button>
+              <Button
+                size="sm"
+                variant={quickChip === "today" ? "default" : "outline"}
+                onClick={() => applyQuickChip("today")}
+              >
+                Hoje ({chipCounts.today})
+              </Button>
+              <Button
+                size="sm"
+                variant={quickChip === "week" ? "default" : "outline"}
+                onClick={() => applyQuickChip("week")}
+              >
+                Esta semana ({chipCounts.week})
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="space-y-1 lg:col-span-2">
+                <Label>Busca</Label>
+                <Input
+                  placeholder="Buscar por evento, pregador ou voluntario"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Tipo de evento</Label>
+                <Select value={filterEventType} onValueChange={setFilterEventType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {eventTypes?.map((et) => (
+                      <SelectItem key={et.id} value={et.id}>
+                        {et.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Periodo</Label>
+                <Select
+                  value={filterTime}
+                  onValueChange={(v) => setFilterTime(v as "all" | "future" | "past")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="future">Futuras</SelectItem>
+                    <SelectItem value="past">Passadas</SelectItem>
+                    <SelectItem value="all">Todas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Minha resposta</Label>
+                <Select
+                  value={filterStatus}
+                  onValueChange={(v) =>
+                    setFilterStatus(v as "all" | "pending" | "confirmed" | "declined")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="pending">Pendentes</SelectItem>
+                    <SelectItem value="confirmed">Confirmadas</SelectItem>
+                    <SelectItem value="declined">Recusadas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>De</Label>
+                <Input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Ate</Label>
+                <Input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-6">
+                <Checkbox
+                  id="filterMineOnly"
+                  checked={filterMineOnly}
+                  onCheckedChange={(value) => setFilterMineOnly(!!value)}
+                />
+                <Label htmlFor="filterMineOnly" className="text-sm">
+                  Somente minhas escalas
+                </Label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {hasActiveFilters
+                  ? `${activeFiltersCount} filtro(s) ativos`
+                  : "Nenhum filtro ativo"}
+              </p>
+              {hasActiveFilters && (
+                <Button size="sm" variant="outline" onClick={clearFilters}>
+                  Limpar filtros
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* View Mode Toggle */}
       {viewMode === "list" && (
@@ -1557,13 +1726,21 @@ export default function Schedules() {
             <CardContent className="py-10 text-center space-y-3">
               <p className="font-medium">Nenhuma escala encontrada</p>
               <p className="text-sm text-muted-foreground">
-                Crie uma escala para começar a organizar os eventos.
+                {hasActiveFilters
+                  ? "Ajuste os filtros para encontrar escalas."
+                  : "Crie uma escala para começar a organizar os eventos."}
               </p>
-              {canManageSchedules && (
-                <Button onClick={() => openQuickCreateDialog()}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Criar escala
+              {hasActiveFilters ? (
+                <Button variant="outline" onClick={clearFilters}>
+                  Limpar filtros
                 </Button>
+              ) : (
+                canManageSchedules && (
+                  <Button onClick={() => openQuickCreateDialog()}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar escala
+                  </Button>
+                )
               )}
             </CardContent>
           </Card>
