@@ -165,7 +165,14 @@ export function useMinistries(organizationId: string | null | undefined) {
         .order("name", { ascending: true });
 
       if (error) throw error;
-      return data as Ministry[];
+      return (data || []).map((ministry: any) => ({
+        id: ministry.id,
+        organizationId: ministry.organization_id ?? ministry.organizationId,
+        name: ministry.name,
+        icon: ministry.icon,
+        whatsappGroupLink:
+          ministry.whatsapp_group_link ?? ministry.whatsappGroupLink ?? null,
+      })) as Ministry[];
     },
     enabled: !!organizationId,
   });
@@ -366,6 +373,7 @@ export function useCreateMinistry() {
     mutationFn: async (ministry: {
       name: string;
       icon?: string;
+      whatsappGroupLink?: string | null;
       organizationId: string;
     }) => {
       const { data, error } = await supabase
@@ -374,6 +382,7 @@ export function useCreateMinistry() {
           id: crypto.randomUUID(),
           name: ministry.name,
           icon: ministry.icon || null,
+          whatsapp_group_link: ministry.whatsappGroupLink || null,
           organization_id: ministry.organizationId,
         })
         .select()
@@ -394,6 +403,7 @@ export function useUpdateMinistry() {
       id: string;
       name: string;
       icon?: string;
+      whatsappGroupLink?: string | null;
       organizationId: string;
     }) => {
       const { data, error } = await supabase
@@ -401,6 +411,7 @@ export function useUpdateMinistry() {
         .update({
           name: ministry.name,
           icon: ministry.icon || null,
+          whatsapp_group_link: ministry.whatsappGroupLink || null,
         })
         .eq("id", ministry.id)
         .eq("organization_id", ministry.organizationId)

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useVolunteerProfile, useMinistries, useCreateMinistry, useUpdateMinistry } from "@/hooks/use-data";
+import type { Ministry } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles, Plus, Loader2, Pencil } from "lucide-react";
+import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles, Plus, Loader2, Pencil, Camera } from "lucide-react";
 
 const iconOptions = [
   { value: "church", label: "Igreja", Icon: Church },
@@ -21,6 +22,7 @@ const iconOptions = [
   { value: "coffee", label: "Café", Icon: Coffee },
   { value: "baby", label: "Bebê", Icon: Baby },
   { value: "sparkles", label: "Estrelas", Icon: Sparkles },
+  { value: "camera", label: "Transmissão", Icon: Camera },
 ];
 
 const iconMap: Record<string, any> = {
@@ -34,6 +36,7 @@ const iconMap: Record<string, any> = {
   baby: Baby,
   sparkles: Sparkles,
   church: Church,
+  camera: Camera,
 };
 
 export default function Ministries() {
@@ -49,6 +52,7 @@ export default function Ministries() {
   const [formData, setFormData] = useState({
     name: "",
     icon: "church",
+    whatsappGroupLink: "",
   });
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -72,16 +76,17 @@ export default function Ministries() {
   const openCreateDialog = () => {
     setFormMode("create");
     setEditingMinistryId(null);
-    setFormData({ name: "", icon: "church" });
+    setFormData({ name: "", icon: "church", whatsappGroupLink: "" });
     setDialogOpen(true);
   };
 
-  const openEditDialog = (ministry: { id: string; name: string; icon?: string | null }) => {
+  const openEditDialog = (ministry: Ministry) => {
     setFormMode("edit");
     setEditingMinistryId(ministry.id);
     setFormData({
       name: ministry.name,
       icon: ministry.icon || "church",
+      whatsappGroupLink: ministry.whatsappGroupLink || "",
     });
     setDialogOpen(true);
   };
@@ -105,12 +110,14 @@ export default function Ministries() {
           id: editingMinistryId,
           name: formData.name.trim(),
           icon: formData.icon,
+          whatsappGroupLink: formData.whatsappGroupLink.trim() || null,
           organizationId: profile.organizationId,
         });
       } else {
         await createMinistry.mutateAsync({
           name: formData.name.trim(),
           icon: formData.icon,
+          whatsappGroupLink: formData.whatsappGroupLink.trim() || null,
           organizationId: profile.organizationId,
         });
       }
@@ -123,7 +130,7 @@ export default function Ministries() {
             : "Ministério cadastrado com sucesso!",
       });
 
-      setFormData({ name: "", icon: "church" });
+      setFormData({ name: "", icon: "church", whatsappGroupLink: "" });
       setDialogOpen(false);
       setEditingMinistryId(null);
       setFormMode("create");
@@ -255,6 +262,19 @@ export default function Ministries() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsappGroupLink">Link do grupo de WhatsApp (opcional)</Label>
+              <Input
+                id="whatsappGroupLink"
+                type="url"
+                value={formData.whatsappGroupLink}
+                onChange={(e) =>
+                  setFormData({ ...formData, whatsappGroupLink: e.target.value })
+                }
+                placeholder="https://chat.whatsapp.com/..."
+                data-testid="input-ministry-whatsapp-link"
+              />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

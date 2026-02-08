@@ -30,6 +30,7 @@ export const ministries = pgTable("ministries", {
   organizationId: uuid("organization_id"),
   name: text("name").notNull(),
   icon: text("icon"),
+  whatsappGroupLink: text("whatsapp_group_link"),
 });
 
 // Volunteer unavailability (full day ranges)

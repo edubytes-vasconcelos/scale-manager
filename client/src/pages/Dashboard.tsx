@@ -293,13 +293,13 @@ export default function Dashboard() {
 
     setPushPermission(Notification.permission);
 
-    const checkExisting = async () => {
-      try {
-        const registration = await navigator.serviceWorker.getRegistration();
-        const subscription = registration
-          ? await registration.pushManager.getSubscription()
-          : null;
-        if (subscription) setPushEnabled(true);
+      const checkExisting = async () => {
+        try {
+          const registration = await navigator.serviceWorker.getRegistration();
+          const subscription = registration
+            ? await registration.pushManager.getSubscription()
+            : null;
+          if (subscription) setPushEnabled(true);
 
         const { data: authData } = await supabase.auth.getUser();
         const user = authData?.user;
@@ -310,11 +310,16 @@ export default function Dashboard() {
           .select("id")
           .eq("user_id", user.id)
           .limit(1);
-        if (data && data.length > 0) setPushEnabled(true);
-      } catch {
-        // ignore
-      }
-    };
+          if (data && data.length > 0) setPushEnabled(true);
+
+          const alreadyEnabled = !!subscription || (data && data.length > 0);
+          if (!alreadyEnabled && Notification.permission !== "denied" && vapidPublicKey) {
+            await handleEnablePush();
+          }
+        } catch {
+          // ignore
+        }
+      };
 
     checkExisting();
   }, []);

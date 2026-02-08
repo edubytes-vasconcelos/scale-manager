@@ -1891,14 +1891,24 @@ export default function Schedules() {
 
       {viewMode === "calendar" && (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex justify-between items-center p-4 border-b border-slate-200/80">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
-            >
-              <ChevronLeft />
-            </Button>
+          <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-200/80">
+            <div className="flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                onClick={() => setCalendarMonth(new Date())}
+              >
+                Hoje
+              </Button>
+            </div>
 
             <div className="text-center">
               <p className="text-xs uppercase tracking-wide text-slate-500">Calendario</p>
@@ -1944,7 +1954,7 @@ export default function Schedules() {
               return (
                 <div
                   key={idx}
-                  className={`border border-slate-200/80 p-1.5 sm:p-2 min-h-[84px] sm:min-h-[120px] transition-colors ${
+                  className={`border border-slate-200/80 p-1 sm:p-2 min-h-[76px] sm:min-h-[120px] transition-colors ${
                     !isSameMonth(day, calendarMonth) ? "bg-slate-50/80 text-slate-400" : "bg-white"
                   } ${hasSchedules ? "bg-emerald-50/30" : ""} ${
                     isSameDay(day, new Date()) ? "ring-1 ring-primary/40 bg-primary/5" : ""
@@ -1962,7 +1972,8 @@ export default function Schedules() {
                     )}
                   </div>
 
-                  {visible.map((s) => {
+                  <div className="hidden sm:block">
+                    {visible.map((s) => {
                     const { preachers } = getNormalizedAssignments(s);
                     const preacherNames = preachers
                       .map((p) => getPreacherName(p.preacherId) || p.name)
@@ -2024,13 +2035,35 @@ export default function Schedules() {
                         )}
                       </div>
                     );
-                  })}
+                    })}
 
-                  {hiddenCount > 0 && (
-                    <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                      +{hiddenCount} escala{hiddenCount > 1 ? "s" : ""}
-                    </div>
-                  )}
+                    {hiddenCount > 0 && (
+                      <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                        +{hiddenCount} escala{hiddenCount > 1 ? "s" : ""}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="sm:hidden mt-1 space-y-1">
+                    {visible.slice(0, 1).map((s) => {
+                      const eventType = eventTypes?.find((e) => e.id === s.eventTypeId);
+                      const readableEventColor = getReadableEventColor(eventType?.color);
+                      return (
+                        <div
+                          key={s.id_uuid}
+                          className="rounded-md px-1.5 py-1 text-[10px] font-medium truncate border border-slate-200/70 bg-white/90"
+                          style={readableEventColor ? { color: readableEventColor } : undefined}
+                        >
+                          {getServiceTitle(s)}
+                        </div>
+                      );
+                    })}
+                    {hiddenCount > 0 && (
+                      <div className="text-[10px] text-muted-foreground">
+                        +{hiddenCount} escala{hiddenCount > 1 ? "s" : ""}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -2040,7 +2073,7 @@ export default function Schedules() {
 
       {/* DIALOG GESTÃO DE VOLUNTÁRIOS */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto w-[95vw] sm:w-auto">
           <DialogHeader>
             <DialogTitle>{isCreateMode ? "Nova escala" : "Gerenciar escala"}</DialogTitle>
             <DialogDescription>
