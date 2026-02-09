@@ -77,9 +77,9 @@ function maskWhatsapp(value: string) {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
-function renderMinistryIcon(icon: unknown) {
-  if (!icon || typeof icon === "string") return null;
-  return icon;
+function renderMinistryIcon(icon: string | null | undefined): React.ReactNode {
+  if (!icon) return null;
+  return null;
 }
 
 const accessLevelLabels: Record<string, string> = {
@@ -94,7 +94,7 @@ const accessLevelClasses: Record<string, string> = {
   volunteer: "bg-slate-100 text-slate-700",
 };
 
-function getAccessLevelBadge(accessLevel?: string) {
+function getAccessLevelBadge(accessLevel?: string | null) {
   const label = accessLevelLabels[accessLevel || "volunteer"] || "Voluntário";
   const className =
     accessLevelClasses[accessLevel || "volunteer"] || "bg-slate-100 text-slate-700";
@@ -257,7 +257,7 @@ export default function Volunteers() {
 
     if (!formName.trim()) {
       toast({
-        title: "Campo obrigatorio",
+        title: "Campo obrigatório",
         description: "Nome é obrigatório.",
         variant: "destructive",
       });
@@ -269,7 +269,7 @@ export default function Volunteers() {
 
     if (!hasEmail && !hasWhatsapp) {
       toast({
-        title: "Contato obrigatorio",
+        title: "Contato obrigatório",
         description: "Informe um e-mail ou WhatsApp.",
         variant: "destructive",
       });
@@ -283,7 +283,7 @@ export default function Volunteers() {
         ministryBlockRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
       toast({
-        title: "Ministerio obrigatorio",
+        title: "Ministério obrigatório",
         description: "Selecione ao menos um ministerio.",
         variant: "destructive",
       });
@@ -352,7 +352,7 @@ const safeAssignments = isAdmin
     if (!organizationId || !currentVolunteer?.id) return;
     if (!unavailabilityStart || !unavailabilityEnd) {
       toast({
-        title: "Periodo obrigatorio",
+        title: "Período obrigatório",
         description: "Informe a data inicial e final.",
         variant: "destructive",
       });
@@ -361,7 +361,7 @@ const safeAssignments = isAdmin
 
     if (unavailabilityEnd < unavailabilityStart) {
       toast({
-        title: "Periodo invalido",
+        title: "Período inválido",
         description: "A data final deve ser igual ou maior que a inicial.",
         variant: "destructive",
       });
@@ -503,10 +503,10 @@ const safeAssignments = isAdmin
             placeholder="Buscar por nome, email ou WhatsApp"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-64"
+            className="w-full sm:w-64"
           />
           <Select value={filterAccessLevel} onValueChange={setFilterAccessLevel}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue placeholder="Nível" />
             </SelectTrigger>
             <SelectContent>
@@ -517,7 +517,7 @@ const safeAssignments = isAdmin
             </SelectContent>
           </Select>
           <Select value={filterMinistry} onValueChange={setFilterMinistry}>
-            <SelectTrigger className="w-52">
+            <SelectTrigger className="w-full sm:w-52">
               <SelectValue placeholder="Ministério" />
             </SelectTrigger>
             <SelectContent>
@@ -589,10 +589,10 @@ const safeAssignments = isAdmin
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-base truncate">
+                  <CardTitle className="text-base truncate" title={v.name}>
                     {v.name}
                   </CardTitle>
-                  <p className="text-sm text-muted-foreground truncate">
+                  <p className="text-sm text-muted-foreground truncate" title={v.email || undefined}>
                     {v.email}
                   </p>
                 </div>
@@ -820,10 +820,10 @@ const safeAssignments = isAdmin
             >
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">
-                  Ministerios {requiresMinistry && <span className="text-destructive">*</span>}
+                  Ministérios {requiresMinistry && <span className="text-destructive">*</span>}
                 </label>
                 {requiresMinistry && !hasMinistry && (
-                  <span className="text-xs text-destructive">Obrigatorio</span>
+                  <span className="text-xs text-destructive">Obrigatório</span>
                 )}
               </div>
 

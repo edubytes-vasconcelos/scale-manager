@@ -78,6 +78,7 @@ import {
   normalizeAssignments,
 } from "@/lib/assignments";
 import { getReadableEventColor } from "@/lib/color";
+import { mapService } from "@/lib/mappers";
 
 /* =====================================================
    TIPOS LOCAIS
@@ -337,7 +338,7 @@ export default function Schedules() {
     if (services?.length) {
       const currentAssignments = getNormalizedAssignments(service).volunteers;
       const otherSameDay = services.filter(
-        (s) => s.id_uuid !== service.id_uuid && s.date === service.date
+        (s) => s.id !== service.id && s.date === service.date
       );
       if (currentAssignments.length > 0 && otherSameDay.length > 0) {
         const conflictsByVolunteer = new Map<string, Set<string>>();
@@ -349,7 +350,7 @@ export default function Schedules() {
               (a) => a.volunteerId === assignment.volunteerId
             );
             if (!hasConflict) return;
-            const key = assignment.volunteerId;
+            const key = assignment.volunteerId!;
             const titles = conflictsByVolunteer.get(key) || new Set<string>();
             titles.add(getServiceTitle(other));
             conflictsByVolunteer.set(key, titles);
@@ -729,11 +730,7 @@ export default function Schedules() {
           .select()
           .single();
         if (error) throw error;
-        createdService = {
-          ...data,
-          organizationId: data.organization_id ?? data.organizationId,
-          eventTypeId: data.event_type_id ?? data.eventTypeId,
-        };
+        createdService = mapService(data);
       } else {
         const { error } = await supabase.from("services").insert(payload);
         if (error) throw error;
@@ -794,14 +791,14 @@ export default function Schedules() {
     if (!canDeleteService(service)) return;
     if (!confirm("Deseja excluir esta escala?")) return;
 
-    const serviceId = (service as any).id_uuid ?? service.id;
+    const serviceId = service.id;
     const { error } = await supabase.rpc("delete_service_if_allowed", {
       p_service_id: serviceId,
     });
 
     if (!error) {
       queryClient.invalidateQueries({
-        queryKey: ["services", profile.organizationId],
+        queryKey: ["services", profile?.organizationId],
       });
       toast({ title: "Escala excluída" });
     } else {
@@ -838,7 +835,7 @@ export default function Schedules() {
     try {
       if (!force && services?.length) {
         const conflicts = services.filter((service) => {
-          if (service.id_uuid === selectedService.id_uuid) return false;
+          if (service.id === selectedService.id) return false;
           if (service.date !== selectedService.date) return false;
           return getNormalizedAssignments(service).volunteers.some(
             (assignment) => assignment.volunteerId === selectedVolunteerId
@@ -885,7 +882,7 @@ export default function Schedules() {
           "dd/MM"
         )}`;
         toast({
-          title: "Voluntario indisponivel",
+          title: "Voluntário indisponível",
           description: reason
             ? `${period}. Motivo: ${reason}`
             : `${period}.`,
@@ -894,21 +891,21 @@ export default function Schedules() {
         return;
       }
 
-      const current = await fetchAssignments(selectedService.id_uuid);
+      const current = await fetchAssignments(selectedService.id);
       if (current.volunteers.some((a) => a.volunteerId === selectedVolunteerId)) return;
 
       const updated = {
         ...current,
         volunteers: [
           ...current.volunteers,
-          { volunteerId: selectedVolunteerId, status: "pending" },
+          { volunteerId: selectedVolunteerId, status: "pending" as const },
         ],
       };
 
       const { error } = await supabase
         .from("services")
         .update({ assignments: buildAssignmentsPayload(updated) })
-        .eq("id_uuid", selectedService.id_uuid);
+        .eq("id_uuid", selectedService.id);
       if (error) throw error;
 
       queryClient.invalidateQueries({
@@ -937,7 +934,7 @@ export default function Schedules() {
     setIsSavingAssign(true);
 
     try {
-      const current = await fetchAssignments(selectedService.id_uuid);
+      const current = await fetchAssignments(selectedService.id);
       const updated = {
         ...current,
         volunteers: current.volunteers.filter((a) => a.volunteerId !== volunteerId),
@@ -946,7 +943,7 @@ export default function Schedules() {
       const { error } = await supabase
         .from("services")
         .update({ assignments: buildAssignmentsPayload(updated) })
-        .eq("id_uuid", selectedService.id_uuid);
+        .eq("id_uuid", selectedService.id);
       if (error) throw error;
 
       queryClient.invalidateQueries({
@@ -984,7 +981,7 @@ export default function Schedules() {
           title: title ? title : null,
           event_type_id: editEventTypeId || null,
         })
-        .eq("id_uuid", selectedService.id_uuid);
+        .eq("id_uuid", selectedService.id);
 
       if (error) throw error;
 
@@ -1023,21 +1020,21 @@ export default function Schedules() {
     setIsSavingPreacher(true);
 
     try {
-      const current = await fetchAssignments(selectedService.id_uuid);
+      const current = await fetchAssignments(selectedService.id);
       if (current.preachers.some((p) => p.preacherId === preacher.id)) return;
 
       const updated = {
         ...current,
         preachers: [
           ...current.preachers,
-          { preacherId: preacher.id, name: preacher.name, role: "pregador" },
+          { preacherId: preacher.id, name: preacher.name, role: "pregador" as const },
         ],
       };
 
       const { error } = await supabase
         .from("services")
         .update({ assignments: buildAssignmentsPayload(updated) })
-        .eq("id_uuid", selectedService.id_uuid);
+        .eq("id_uuid", selectedService.id);
       if (error) throw error;
 
       queryClient.invalidateQueries({
@@ -1065,7 +1062,7 @@ export default function Schedules() {
     setIsSavingPreacher(true);
 
     try {
-      const current = await fetchAssignments(selectedService.id_uuid);
+      const current = await fetchAssignments(selectedService.id);
       const updated = {
         ...current,
         preachers: current.preachers.filter((p) => p.preacherId !== preacherId),
@@ -1074,7 +1071,7 @@ export default function Schedules() {
       const { error } = await supabase
         .from("services")
         .update({ assignments: buildAssignmentsPayload(updated) })
-        .eq("id_uuid", selectedService.id_uuid);
+        .eq("id_uuid", selectedService.id);
       if (error) throw error;
 
       queryClient.invalidateQueries({
@@ -1171,7 +1168,7 @@ export default function Schedules() {
       });
 
       if (selectedService) {
-        const current = await fetchAssignments(selectedService.id_uuid);
+        const current = await fetchAssignments(selectedService.id);
         const next = {
           ...current,
           preachers: current.preachers.map((p) =>
@@ -1181,7 +1178,7 @@ export default function Schedules() {
         const { error } = await supabase
           .from("services")
           .update({ assignments: buildAssignmentsPayload(next) })
-          .eq("id_uuid", selectedService.id_uuid);
+          .eq("id_uuid", selectedService.id);
         if (error) throw error;
         setSelectedService({
           ...selectedService,
@@ -1211,24 +1208,22 @@ export default function Schedules() {
     if (!profile) return;
 
     try {
-      const current = await fetchAssignments(service.id_uuid);
+      const current = await fetchAssignments(service.id);
       const updated = {
         ...current,
         volunteers: current.volunteers.map((a) =>
-          a.volunteerId === profile.id ? { ...a, status: "confirmed" } : a
+          a.volunteerId === profile.id ? { ...a, status: "confirmed" as const } : a
         ),
       };
 
       const { error } = await supabase
         .from("services")
         .update({ assignments: buildAssignmentsPayload(updated) })
-        .eq("id_uuid", service.id_uuid);
+        .eq("id_uuid", service.id);
       if (error) throw error;
       queryClient.invalidateQueries({
         queryKey: ["services", profile.organizationId],
       });
-
-      await notifyNewSchedule(dates.length);
 
       toast({ title: "Confirmado!", description: "Sua presença foi confirmada." });
     } catch (error: any) {
@@ -1245,12 +1240,12 @@ export default function Schedules() {
     if (!selectedService || !profile) return;
 
     try {
-      const current = await fetchAssignments(selectedService.id_uuid);
+      const current = await fetchAssignments(selectedService.id);
       const updated = {
         ...current,
         volunteers: current.volunteers.map((a) =>
           a.volunteerId === profile.id
-            ? { ...a, status: "declined", note: declineReason }
+            ? { ...a, status: "declined" as const, note: declineReason }
             : a
         ),
       };
@@ -1258,7 +1253,7 @@ export default function Schedules() {
       const { error } = await supabase
         .from("services")
         .update({ assignments: buildAssignmentsPayload(updated) })
-        .eq("id_uuid", selectedService.id_uuid);
+        .eq("id_uuid", selectedService.id);
       if (error) throw error;
 
       queryClient.invalidateQueries({
@@ -1339,7 +1334,7 @@ export default function Schedules() {
 
         assignments.forEach((assignment) => {
           const volunteer = volunteers?.find((v) => v.id === assignment.volunteerId);
-          const volunteerName = volunteer?.name || "Voluntario";
+          const volunteerName = volunteer?.name || "Voluntário";
           const statusLabel = getStatusLabel(assignment.status);
           const ministryId = volunteer?.ministryAssignments?.[0]?.ministryId;
           const ministryName =
@@ -1428,7 +1423,7 @@ export default function Schedules() {
                 <th>Escala</th>
                 <th>Tipo</th>
                 <th>Pregador</th>
-                <th>Voluntarios</th>
+                <th>Voluntários</th>
               </tr>
             </thead>
             <tbody>
@@ -1453,7 +1448,7 @@ export default function Schedules() {
     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!iframeDoc) {
       toast({
-        title: "Nao foi possivel gerar o PDF",
+        title: "Não foi possível gerar o PDF",
         description: "Tente novamente.",
         variant: "destructive",
       });
@@ -1470,7 +1465,7 @@ export default function Schedules() {
       if (!contentWindow) {
         document.body.removeChild(iframe);
         toast({
-          title: "Nao foi possivel gerar o PDF",
+          title: "Não foi possível gerar o PDF",
           description: "Tente novamente.",
           variant: "destructive",
         });
@@ -1546,7 +1541,7 @@ export default function Schedules() {
           <p className="text-sm text-muted-foreground">Gerencie escalas e confirmações</p>
           {!canManageSchedules && (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Voce nao tem permissao para editar o evento.
+                Você não tem permissão para editar o evento.
               </div>
             )}
         </div>
@@ -1758,7 +1753,7 @@ export default function Schedules() {
 
               return (
                 <Card
-                  key={service.id_uuid}
+                  key={service.id}
                   className="rounded-2xl border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
                 >
                 <div className="h-1 bg-gradient-to-r from-primary/70 via-primary/30 to-transparent" />
@@ -1822,7 +1817,7 @@ export default function Schedules() {
                     <div className="space-y-1 text-sm">
                       {assignments.map((a, idx) => (
                         <div
-                          key={`${service.id_uuid}-${idx}`}
+                          key={`${service.id}-${idx}`}
                           className="flex items-center justify-between gap-2"
                         >
                           <span className="truncate">{getVolunteerName(a.volunteerId)}</span>
@@ -1843,7 +1838,7 @@ export default function Schedules() {
                       </p>
                       {preacherAssignments.map((p, idx) => (
                         <div
-                          key={`${service.id_uuid}-preacher-${idx}`}
+                          key={`${service.id}-preacher-${idx}`}
                           className="flex items-center justify-between gap-2"
                         >
                           <span className="truncate">
@@ -1994,7 +1989,7 @@ export default function Schedules() {
 
                     return (
                       <div
-                        key={s.id_uuid}
+                        key={s.id}
                         className="group relative text-[10px] sm:text-xs rounded-md px-2 py-1 mt-1 truncate border border-slate-200/70 bg-white/90 shadow-[0_1px_4px_rgba(15,23,42,0.04)] border-l-2"
                         style={eventStyle}
                         title={getServiceTitle(s)}
@@ -2050,7 +2045,7 @@ export default function Schedules() {
                       const readableEventColor = getReadableEventColor(eventType?.color);
                       return (
                         <div
-                          key={s.id_uuid}
+                          key={s.id}
                           className="rounded-md px-1.5 py-1 text-[10px] font-medium truncate border border-slate-200/70 bg-white/90"
                           style={readableEventColor ? { color: readableEventColor } : undefined}
                         >
@@ -2246,7 +2241,7 @@ export default function Schedules() {
 
                 {!canManageSchedules && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Voce nao tem permissao para editar o evento.
+                    Você não tem permissão para editar o evento.
                   </div>
                 )}
 
@@ -2257,7 +2252,7 @@ export default function Schedules() {
                   </div>
                   <div className="space-y-2">
                     <Label>
-                      Voluntarios escalados ({selectedAssignments.volunteers.length})
+                      Voluntários escalados ({selectedAssignments.volunteers.length})
                     </Label>
 
                     {selectedAssignments.volunteers.length > 0 ? (
@@ -2352,14 +2347,14 @@ export default function Schedules() {
 
                   {!canManagePreaching && (
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Voce nao tem permissao para editar pregadores.
+                      Você não tem permissão para editar pregadores.
                     </div>
                   )}
                 </div>
 
                 {!canManageVolunteers && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Voce nao tem permissao para editar voluntarios.
+                    Você não tem permissão para editar voluntários.
                   </div>
                 )}
 
@@ -2406,7 +2401,7 @@ export default function Schedules() {
                     </Select>
 
                     <Button
-                      onClick={handleAddVolunteer}
+                      onClick={() => handleAddVolunteer()}
                       disabled={isSavingAssign}
                       className="w-full"
                     >
@@ -2599,7 +2594,7 @@ export default function Schedules() {
 
               return (
               <div
-                key={service.id_uuid}
+                key={service.id}
                 className="flex items-center justify-between gap-2 rounded-md border p-2"
               >
                 <div className="min-w-0">

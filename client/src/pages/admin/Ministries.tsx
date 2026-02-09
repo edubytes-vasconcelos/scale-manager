@@ -155,19 +155,20 @@ export default function Ministries() {
             Gerencie os ministérios da sua igreja
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Input
             placeholder="Buscar ministério..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-56"
+            className="w-full sm:w-56"
           />
           <Badge variant="outline" className="text-sm">
             {filteredMinistries.length} ministérios
           </Badge>
-          <Button 
-            onClick={openCreateDialog} 
+          <Button
+            onClick={openCreateDialog}
             disabled={profileLoading || !profile?.organizationId}
+            title={profileLoading ? "Carregando..." : !profile?.organizationId ? "Organização não encontrada" : undefined}
             data-testid="button-add-ministry"
           >
             <Plus className="w-4 h-4 mr-2" />

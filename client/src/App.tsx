@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
@@ -42,22 +42,17 @@ function AppShellSkeleton({ message }: { message: string }) {
   );
 }
 
-/**
- * 🔐 ProtectedRoute
- * Responsável por:
- * - Aguardar auth estar pronta
- * - Garantir sessão válida
- * - Aguardar carregamento do perfil
- * - Decidir onboarding somente após perfil existir
- */
+type Role = "admin" | "leader" | "volunteer";
+
 function ProtectedRoute({
   component: Component,
+  allowedRoles,
 }: {
   component: React.ComponentType;
+  allowedRoles?: Role[];
 }) {
   const { session, volunteer, loading, authReady } = useAuth();
 
-  // 🔄 Aguarda autenticação e bootstrap do AuthProvider
   if (loading || !authReady) {
     if (session) {
       return <AppShellSkeleton message="Carregando sistema..." />;
@@ -74,22 +69,33 @@ function ProtectedRoute({
     );
   }
 
-  // 🔒 Não autenticado
   if (!session) {
     return <Redirect to="/login" />;
   }
 
-  // 🧭 Sessão existe, mas perfil ainda não existe (auto cadastro)
   if (!volunteer) {
     return <Onboarding />;
   }
 
-  // 🧭 Usuário autenticado, mas ainda sem organização
   if (!volunteer.organizationId) {
     return <Onboarding />;
   }
 
-  // ✅ Tudo pronto → renderiza a página
+  if (allowedRoles && !allowedRoles.includes(volunteer.accessLevel as Role)) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center gap-4 py-24 px-6 text-center">
+          <ShieldAlert className="w-12 h-12 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Acesso restrito</h2>
+          <p className="text-sm text-muted-foreground max-w-md">
+            Você não tem permissão para acessar esta página. Entre em contato com um administrador da sua igreja.
+          </p>
+          <Redirect to="/" />
+        </div>
+      </AppLayout>
+    );
+  }
+
   return <Component />;
 }
 
@@ -135,30 +141,35 @@ function Router() {
 
       <Route path="/admin/volunteers">
         <ProtectedRoute
+          allowedRoles={["admin", "leader"]}
           component={() => <AdminPageWrapper Component={Volunteers} />}
         />
       </Route>
 
       <Route path="/admin/ministries">
         <ProtectedRoute
+          allowedRoles={["admin"]}
           component={() => <AdminPageWrapper Component={Ministries} />}
         />
       </Route>
 
       <Route path="/admin/event-types">
         <ProtectedRoute
+          allowedRoles={["admin"]}
           component={() => <AdminPageWrapper Component={EventTypes} />}
         />
       </Route>
 
       <Route path="/admin/church-settings">
         <ProtectedRoute
+          allowedRoles={["admin", "leader"]}
           component={() => <AdminPageWrapper Component={ChurchSettings} />}
         />
       </Route>
 
       <Route path="/admin/teams">
         <ProtectedRoute
+          allowedRoles={["admin", "leader"]}
           component={() => <AdminPageWrapper Component={Teams} />}
         />
       </Route>

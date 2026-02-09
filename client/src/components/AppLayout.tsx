@@ -187,6 +187,7 @@ export default function AppLayout({
                 size="icon"
                 variant="ghost"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
               >
                 {mobileMenuOpen ? (
                   <X className="w-5 h-5" />
@@ -211,7 +212,7 @@ export default function AppLayout({
                   Instalar
                 </Button>
               )}
-              <Button size="icon" variant="ghost" onClick={handleSignOut}>
+              <Button size="icon" variant="ghost" onClick={handleSignOut} aria-label="Sair">
                 <LogOut className="w-5 h-5" />
               </Button>
             </div>

@@ -2,6 +2,12 @@ import { pgTable, text, timestamp, uuid, jsonb, boolean, date } from "drizzle-or
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Ministry assignment type with leader flag
+export type MinistryAssignment = {
+  ministryId: string;
+  isLeader: boolean;
+};
+
 // Mirrors the existing Supabase 'volunteers' table
 export const volunteers = pgTable("volunteers", {
   id: uuid("id").primaryKey(),
@@ -13,7 +19,7 @@ export const volunteers = pgTable("volunteers", {
   email: text("email"),
   whatsapp: text("whatsapp"),
   acceptsNotifications: text("accepts_notifications").default("true"), // "true" | "false" stored as text
-  ministryAssignments: jsonb("ministry_assignments"),
+  ministryAssignments: jsonb("ministry_assignments").$type<MinistryAssignment[]>(),
   createdAt: timestamp("created_at"),
 });
 
@@ -60,12 +66,6 @@ export const eventTypes = pgTable("event_types", {
   color: text("color"),
 });
 
-// Ministry assignment type with leader flag
-export type MinistryAssignment = {
-  ministryId: string;
-  isLeader: boolean;
-};
-
 // Assignment type for services
 export type ServiceAssignment = {
   volunteerId?: string;
@@ -100,7 +100,7 @@ export type ServiceAssignmentsPayload =
 
 // Mirrors the existing Supabase 'services' table
 export const services = pgTable("services", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id_uuid").primaryKey(),
   organizationId: uuid("organization_id"),
   date: text("date").notNull(), // stored as YYYY-MM-DD string
   title: text("title").notNull(),

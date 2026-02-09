@@ -134,8 +134,8 @@ export default function EventTypes() {
     const normalizedName = normalizeName(formData.name);
     if (!normalizedName) {
       toast({
-        title: "Campo obrigatorio",
-        description: "O nome eh obrigatorio.",
+        title: "Campo obrigatório",
+        description: "O nome é obrigatório.",
         variant: "destructive",
       });
       return;
@@ -252,7 +252,7 @@ export default function EventTypes() {
 
       {!profileLoading && profile && !canManageEventTypes && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Voce nao tem permissao para criar ou editar tipos de evento.
+          Você não tem permissão para criar ou editar tipos de evento.
         </div>
       )}
 
@@ -416,7 +416,7 @@ export default function EventTypes() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Use o formato #RRGGBB. Se valido, ele sera aplicado automaticamente.
+                Use o formato #RRGGBB. Se válido, ele será aplicado automaticamente.
               </p>
             </div>
             <DialogFooter>

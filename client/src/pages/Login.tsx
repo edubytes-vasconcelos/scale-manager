@@ -77,8 +77,8 @@ export default function Login() {
     const phone = normalizePhone(whatsappPhone);
     if (phone.length < 10) {
       toast({
-        title: "Telefone invalido",
-        description: "Informe um WhatsApp valido.",
+        title: "Telefone inválido",
+        description: "Informe um WhatsApp válido.",
         variant: "destructive",
       });
       return;
@@ -101,12 +101,12 @@ export default function Login() {
       setCodeRequestedAt(Date.now());
       setCodeExpiresIn(5 * 60);
       toast({
-        title: "Codigo enviado",
+        title: "Código enviado",
         description: "Confira seu WhatsApp.",
       });
     } catch (error: any) {
       toast({
-        title: "Erro ao enviar codigo",
+        title: "Erro ao enviar código",
         description: error?.message || "Tente novamente.",
         variant: "destructive",
       });
@@ -120,7 +120,7 @@ export default function Login() {
     if (phone.length < 10 || !whatsappCode.trim()) {
       toast({
         title: "Dados incompletos",
-        description: "Informe telefone e codigo.",
+        description: "Informe telefone e código.",
         variant: "destructive",
       });
       return;
@@ -138,7 +138,7 @@ export default function Login() {
           : undefined,
       });
       if (error) throw error;
-      if (!data?.session) throw new Error("Sessao nao retornada");
+      if (!data?.session) throw new Error("Sessão não retornada");
 
       await supabase.auth.setSession({
         access_token: data.session.access_token,
@@ -156,7 +156,7 @@ export default function Login() {
       });
     } catch (error: any) {
       toast({
-        title: "Codigo invalido",
+        title: "Código inválido",
         description: error?.message || "Tente novamente.",
         variant: "destructive",
       });
@@ -326,11 +326,6 @@ export default function Login() {
               />
               {isSignUp && (
                 <p className="text-xs text-muted-foreground ml-1">Mínimo de 6 caracteres</p>
-              )}
-              {!isSignUp && (
-                <p className="text-xs text-muted-foreground ml-1">
-                  Mínimo de 6 caracteres
-                </p>
               )}
             </div>
 

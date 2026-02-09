@@ -18,7 +18,7 @@ export default function ChurchSettings() {
   if (!profile) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-muted-foreground">
-        Carregando configuracoes...
+        Carregando configurações...
       </div>
     );
   }
@@ -39,7 +39,14 @@ export default function ChurchSettings() {
       .select("invite_code")
       .eq("id", profile.organizationId)
       .single();
-    if (error) return;
+    if (error) {
+      toast({
+        title: "Erro ao carregar código",
+        description: "Não foi possível buscar o código de convite.",
+        variant: "destructive",
+      });
+      return;
+    }
     setInviteCode(data?.invite_code || "");
   };
 
@@ -53,13 +60,13 @@ export default function ChurchSettings() {
       if (error) throw error;
       setInviteCode(data || "");
       toast({
-        title: "Codigo atualizado",
-        description: "Compartilhe este codigo com os voluntarios.",
+        title: "Código atualizado",
+        description: "Compartilhe este código com os voluntários.",
       });
     } catch (error: any) {
       toast({
         title: "Erro",
-        description: error?.message || "Nao foi possivel gerar o codigo.",
+        description: error?.message || "Não foi possível gerar o código.",
         variant: "destructive",
       });
     } finally {
@@ -75,7 +82,7 @@ export default function ChurchSettings() {
     if (!inviteCode) return "";
     const linkText = joinUrl ? `
 Link: ${joinUrl}` : "";
-    return `Use este codigo para vincular sua conta a igreja ${organizationName}: ${inviteCode}${linkText}`;
+    return `Use este código para vincular sua conta à igreja ${organizationName}: ${inviteCode}${linkText}`;
   };
 
   const handleShareWhatsApp = () => {
@@ -90,11 +97,11 @@ Link: ${joinUrl}` : "";
     try {
       await navigator.clipboard.writeText(inviteCode);
       toast({
-        title: "Codigo copiado",
+        title: "Código copiado",
       });
     } catch {
       toast({
-        title: "Nao foi possivel copiar",
+        title: "Não foi possível copiar",
         variant: "destructive",
       });
     }
@@ -107,7 +114,7 @@ Link: ${joinUrl}` : "";
   if (!isAdmin && !isLeader) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Voce nao tem permissao para acessar as configuracoes da igreja.
+        Você não tem permissão para acessar as configurações da igreja.
       </div>
     );
   }
@@ -117,7 +124,7 @@ Link: ${joinUrl}` : "";
       <div>
         <h1 className="text-2xl font-bold">Configuracoes da igreja</h1>
         <p className="text-sm text-muted-foreground">
-          Gerencie o codigo de convite para novos voluntarios.
+          Gerencie o código de convite para novos voluntários.
         </p>
       </div>
 
@@ -132,7 +139,7 @@ Link: ${joinUrl}` : "";
 
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-              Codigo de convite
+              Código de convite
             </Label>
             <div className="flex flex-wrap gap-2">
               <Input value={inviteCode} readOnly className="max-w-xs" />
@@ -144,7 +151,7 @@ Link: ${joinUrl}` : "";
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Compartilhe este codigo para que voluntarios vinculem a conta.
+              Compartilhe este código para que voluntários vinculem a conta.
             </p>
           </div>
 
@@ -160,7 +167,7 @@ Link: ${joinUrl}` : "";
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleGenerateCode} disabled={loading}>
               <RefreshCw className="w-4 h-4 mr-2" />
-              {inviteCode ? "Gerar novo codigo" : "Gerar codigo"}
+              {inviteCode ? "Gerar novo código" : "Gerar código"}
             </Button>
           </div>
         </CardContent>

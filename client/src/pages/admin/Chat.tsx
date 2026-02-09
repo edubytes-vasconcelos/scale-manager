@@ -179,6 +179,7 @@ export default function AdminChat() {
                   className="md:hidden"
                   onClick={() => setSelectedVolunteerId(null)}
                   data-testid="button-back-to-list"
+                  aria-label="Voltar para lista"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
@@ -245,6 +246,7 @@ export default function AdminChat() {
                     onClick={handleSend}
                     disabled={!message.trim() || sendMessage.isPending}
                     data-testid="button-admin-send"
+                    aria-label="Enviar mensagem"
                   >
                     <Send className="w-4 h-4" />
                   </Button>

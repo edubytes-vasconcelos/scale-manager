@@ -36,6 +36,16 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { format, isAfter, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -68,6 +78,7 @@ export default function Dashboard() {
   const [unavailabilityStart, setUnavailabilityStart] = useState("");
   const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
   const [unavailabilityReason, setUnavailabilityReason] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showNotifications, setShowNotifications] = useState(true);
   const [showUnavailabilitySection, setShowUnavailabilitySection] = useState(true);
   const [scheduleFilter, setScheduleFilter] = useState<"all" | "pending" | "confirmed">("all");
@@ -219,7 +230,7 @@ export default function Dashboard() {
     if (!volunteer?.organizationId || !volunteer?.id) return;
     if (!unavailabilityStart || !unavailabilityEnd) {
       toast({
-        title: "Periodo obrigatorio",
+        title: "Período obrigatório",
         description: "Informe a data inicial e final.",
         variant: "destructive",
       });
@@ -228,7 +239,7 @@ export default function Dashboard() {
 
     if (unavailabilityEnd < unavailabilityStart) {
       toast({
-        title: "Periodo invalido",
+        title: "Período inválido",
         description: "A data final deve ser igual ou maior que a inicial.",
         variant: "destructive",
       });
@@ -248,12 +259,12 @@ export default function Dashboard() {
       setUnavailabilityReason("");
       toast({
         title: "Indisponibilidade registrada",
-        description: "Periodo adicionado com sucesso.",
+        description: "Período adicionado com sucesso.",
       });
     } catch {
       toast({
         title: "Erro",
-        description: "Nao foi possivel salvar sua indisponibilidade.",
+        description: "Não foi possível salvar sua indisponibilidade.",
         variant: "destructive",
       });
     }
@@ -272,9 +283,11 @@ export default function Dashboard() {
     } catch {
       toast({
         title: "Erro",
-        description: "Nao foi possivel remover.",
+        description: "Não foi possível remover.",
         variant: "destructive",
       });
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -332,18 +345,18 @@ export default function Dashboard() {
       await supabase.functions.invoke("send-push", {
         body: {
           userId: user.id,
-          title: "Teste de notificacao",
-          body: "Se voce recebeu, esta tudo certo!",
+          title: "Teste de notificação",
+          body: "Se você recebeu, está tudo certo!",
         },
       });
       toast({
         title: "Teste enviado",
-        description: "Verifique se a notificacao chegou.",
+        description: "Verifique se a notificação chegou.",
       });
     } catch (error: any) {
       toast({
         title: "Erro",
-        description: error?.message || "Nao foi possivel enviar o teste.",
+        description: error?.message || "Não foi possível enviar o teste.",
         variant: "destructive",
       });
     }
@@ -369,13 +382,13 @@ export default function Dashboard() {
 
       setPushEnabled(false);
       toast({
-        title: "Notificacoes desativadas",
-        description: "Voce nao recebera alertas neste dispositivo.",
+        title: "Notificações desativadas",
+        description: "Você não receberá alertas neste dispositivo.",
       });
     } catch (error: any) {
       toast({
         title: "Erro",
-        description: error?.message || "Nao foi possivel desativar.",
+        description: error?.message || "Não foi possível desativar.",
         variant: "destructive",
       });
     } finally {
@@ -387,7 +400,7 @@ export default function Dashboard() {
     if (!pushSupported) return;
     if (!vapidPublicKey) {
       toast({
-        title: "VAPID nao configurado",
+        title: "VAPID não configurado",
         description: "Defina VITE_VAPID_PUBLIC_KEY no ambiente.",
         variant: "destructive",
       });
@@ -418,7 +431,7 @@ export default function Dashboard() {
 
       const { data: authData } = await supabase.auth.getUser();
       const user = authData?.user;
-      if (!user) throw new Error("Usuario nao autenticado.");
+      if (!user) throw new Error("Usuário não autenticado.");
 
       const { data: existing } = await supabase
         .from("push_subscriptions")
@@ -437,12 +450,12 @@ export default function Dashboard() {
 
       setPushEnabled(true);
       toast({
-        title: "Notificacoes ativadas",
-        description: "Voce recebera alertas de novas escalas.",
+        title: "Notificações ativadas",
+        description: "Você receberá alertas de novas escalas.",
       });
     } catch (error: any) {
       toast({
-        title: "Erro ao ativar notificacoes",
+        title: "Erro ao ativar notificações",
         description: error?.message || "Tente novamente.",
         variant: "destructive",
       });
@@ -850,9 +863,9 @@ export default function Dashboard() {
                       size="icon"
                       variant="ghost"
                       className="text-destructive"
-                      onClick={() => handleDeleteUnavailability(entry.id)}
+                      onClick={() => setDeleteConfirmId(entry.id)}
                       disabled={deleteUnavailability.isPending}
-                      title="Remover"
+                      aria-label="Remover indisponibilidade"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -867,7 +880,7 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <div className="space-y-1">
-                <Label className="text-xs font-medium">Inicio</Label>
+                <Label className="text-xs font-medium">Início</Label>
                 <Input
                   type="date"
                   value={unavailabilityStart}
@@ -993,6 +1006,31 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* DELETE CONFIRMATION */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover indisponibilidade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita. O período será removido da sua lista.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteConfirmId && handleDeleteUnavailability(deleteConfirmId)}
+              disabled={deleteUnavailability.isPending}
+            >
+              {deleteUnavailability.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { UsersRound, User, Plus, Loader2, Trash2, Pencil } from "lucide-react";
@@ -25,6 +35,7 @@ export default function Teams() {
   
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     memberIds: [] as string[],
@@ -88,6 +99,7 @@ export default function Teams() {
           id: editingTeam.id,
           name: formData.name.trim(),
           memberIds: formData.memberIds,
+          organizationId: profile!.organizationId!,
         });
         toast({
           title: "Sucesso",
@@ -136,11 +148,9 @@ export default function Teams() {
     setFormData({ name: "", memberIds: [] });
   };
 
-  const handleDelete = async (teamId: string, teamName: string) => {
-    if (!confirm(`Tem certeza que deseja excluir a equipe "${teamName}"?`)) return;
-    
+  const handleDelete = async (teamId: string) => {
     try {
-      await deleteTeam.mutateAsync(teamId);
+      await deleteTeam.mutateAsync({ id: teamId, organizationId: profile!.organizationId! });
       toast({
         title: "Equipe excluída",
         description: "A equipe foi removida com sucesso.",
@@ -151,6 +161,8 @@ export default function Teams() {
         description: error.message || "Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -225,7 +237,7 @@ export default function Teams() {
                         size="icon"
                         variant="ghost"
                         className="text-destructive"
-                        onClick={() => handleDelete(team.id, team.name)}
+                        onClick={() => setDeleteTarget({ id: team.id, name: team.name })}
                         data-testid={`button-delete-team-${team.id}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -339,6 +351,28 @@ export default function Teams() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir equipe?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A equipe <strong>{deleteTarget?.name}</strong> será removida permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && handleDelete(deleteTarget.id)}
+              disabled={deleteTeam.isPending}
+            >
+              {deleteTeam.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
