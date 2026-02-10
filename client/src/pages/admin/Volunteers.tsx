@@ -563,7 +563,17 @@ const safeAssignments = isAdmin
           const isVolunteerLeader = v.ministryAssignments?.some(
             (a) => a.isLeader
           );
-          const accessBadge = getAccessLevelBadge(v.accessLevel);
+          const effectiveAccessLevel =
+            v.accessLevel === "admin"
+              ? "admin"
+              : isVolunteerLeader || v.accessLevel === "leader"
+                ? "leader"
+                : "volunteer";
+          const accessBadge = getAccessLevelBadge(effectiveAccessLevel);
+          const accessBadgeLabel =
+            isVolunteerLeader
+              ? "Líder de ministério"
+              : accessBadge.label;
 
           return (
             <Card
@@ -639,7 +649,7 @@ const safeAssignments = isAdmin
                 <div className="flex items-center justify-between">
                   <Badge className={accessBadge.className}>
                     <UserCheck className="w-3 h-3 mr-1" />
-                    {accessBadge.label}
+                    {accessBadgeLabel}
                   </Badge>
 
                   <Badge

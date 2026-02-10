@@ -33,6 +33,12 @@ import {
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import {
@@ -2068,8 +2074,8 @@ export default function Schedules() {
 
       {/* DIALOG GESTÃO DE VOLUNTÁRIOS */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto w-[95vw] sm:w-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-md w-[96vw] sm:w-[92vw] lg:w-[640px] max-h-[90dvh] overflow-hidden p-0">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b bg-background">
             <DialogTitle>{isCreateMode ? "Nova escala" : "Gerenciar escala"}</DialogTitle>
             <DialogDescription>
               {selectedService ? (
@@ -2098,9 +2104,9 @@ export default function Schedules() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5">
+          <div className="space-y-3 max-h-[calc(90dvh-92px)] overflow-y-auto px-4 py-3">
             {isCreateMode ? (
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Evento
                 </div>
@@ -2200,7 +2206,7 @@ export default function Schedules() {
                   Evento
                 </div>
                 {canManageSchedules && (
-                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                     <div className="space-y-1">
                       <Label>Tipo de evento</Label>
                       <Select value={editEventTypeId} onValueChange={setEditEventTypeId}>
@@ -2245,11 +2251,21 @@ export default function Schedules() {
                   </div>
                 )}
 
-                {/* LISTAGEM ATUAL */}
-                <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Pessoas
-                  </div>
+                <Accordion
+                  type="multiple"
+                  defaultValue={
+                    selectedAssignments.volunteers.length > 0 ||
+                    selectedAssignments.preachers.length > 0
+                      ? ["people"]
+                      : []
+                  }
+                  className="rounded-2xl border border-slate-200 bg-white px-3 shadow-sm"
+                >
+                  <AccordionItem value="people" className="border-none">
+                    <AccordionTrigger className="py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:no-underline">
+                      Pessoas e atribuicoes
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-3">
                   <div className="space-y-2">
                     <Label>
                       Voluntários escalados ({selectedAssignments.volunteers.length})
@@ -2350,7 +2366,9 @@ export default function Schedules() {
                       Você não tem permissão para editar pregadores.
                     </div>
                   )}
-                </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
 
                 {!canManageVolunteers && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -2359,8 +2377,10 @@ export default function Schedules() {
                 )}
 
                 {canManageVolunteers && (
-                  <div className="space-y-2 border-t pt-2">
-                    <Label>Adicionar voluntario</Label>
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Adicionar voluntario
+                    </Label>
                     <Select value={selectedVolunteerId} onValueChange={setSelectedVolunteerId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um voluntario" />
@@ -2411,8 +2431,10 @@ export default function Schedules() {
                 )}
 
                 {canManagePreaching && (
-                  <div className="space-y-3 border-t pt-2">
-                    <Label>Adicionar pregador</Label>
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Adicionar pregador
+                    </Label>
                     <Input
                       placeholder="Buscar ou cadastrar pregador"
                       ref={preacherSearchRef}

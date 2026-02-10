@@ -641,15 +641,15 @@ export default function Dashboard() {
 
         {/* ALERTAS */}
         {pushSupported && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Bell className="w-5 h-5 text-primary" />
+          <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Bell className="w-4 h-4 text-primary" />
                 </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">Alertas</p>
-                  <p className="text-sm text-muted-foreground">
+                <div className="space-y-0.5">
+                  <p className="font-semibold leading-tight">Alertas</p>
+                  <p className="text-xs text-muted-foreground">
                     Receba avisos quando novas escalas forem criadas.
                   </p>
                 </div>
@@ -657,6 +657,7 @@ export default function Dashboard() {
               <Button
                 variant="ghost"
                 size="sm"
+                className="h-8 px-2 text-xs"
                 onClick={() => setShowNotifications((prev) => !prev)}
               >
                 {showNotifications ? "Ocultar" : "Mostrar"}
@@ -664,8 +665,8 @@ export default function Dashboard() {
             </div>
 
             {showNotifications && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="space-y-0.5 text-xs text-muted-foreground">
                 {!pushSupported && (
                   <p>Seu navegador não suporta notificações push.</p>
                 )}
@@ -680,6 +681,8 @@ export default function Dashboard() {
                   variant="outline"
                   onClick={handleTestPush}
                   disabled={!pushEnabled}
+                  size="sm"
+                  className="h-8"
                 >
                   Testar alerta
                 </Button>
@@ -689,6 +692,8 @@ export default function Dashboard() {
                     variant="outline"
                     onClick={handleDisablePush}
                     disabled={pushLoading}
+                    size="sm"
+                    className="h-8"
                   >
                     {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     Desativar alertas
@@ -698,6 +703,8 @@ export default function Dashboard() {
                     onClick={handleEnablePush}
                     disabled={!pushSupported || pushLoading || pushEnabled || pushPermission === "denied"}
                     variant={pushEnabled ? "outline" : "default"}
+                    size="sm"
+                    className="h-8"
                   >
                     {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     {pushEnabled ? "Alertas ativados" : "Ativar alertas"}
