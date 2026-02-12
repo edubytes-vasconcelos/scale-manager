@@ -240,12 +240,12 @@ export default function AppLayout({
               </Button>
               <img
                 src="/brand/logo-192.png"
-                alt="Logo – Gestor IASD"
+                alt="Logo – Gestor Escalas"
                 className="h-7 w-7"
                 draggable={false}
               />
               <span className="font-display font-bold text-lg">
-                Gestor IASD
+                Gestor Escalas
               </span>
               {syncingProfile && (
                 <span className="text-[11px] text-muted-foreground">Sincronizando...</span>
@@ -380,25 +380,22 @@ export default function AppLayout({
           {/* DESKTOP SIDEBAR */}
           <aside className="hidden lg:flex flex-col w-64 bg-card border-r border-border min-h-screen sticky top-0">
             <div className="p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <LayoutDashboard className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <img
-                      src="/brand/logo-192.png"
-                      alt="Logo – Gestor IASD"
-                      className="h-7 w-7"
-                      draggable={false}
-                    />
-                    <span className="font-display font-bold text-lg block">
-                      Gestor IASD
-                    </span>
+              <div className="rounded-xl border border-border/80 bg-gradient-to-b from-primary/[0.08] to-transparent px-3 py-3">
+                <div className="flex items-center gap-2.5">
+                  <img
+                    src="/brand/logo-192.png"
+                    alt="Logo – Gestor Escalas"
+                    className="h-8 w-8 rounded-md ring-1 ring-primary/20"
+                    draggable={false}
+                  />
+                  <div className="min-w-0">
+                    <p className="font-display text-lg font-bold leading-tight text-foreground">
+                      Gestor Escalas
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {profile?.organization?.name || "Igreja"}
+                    </p>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {profile?.organization?.name || "Igreja"}
-                  </span>
                 </div>
               </div>
             </div>

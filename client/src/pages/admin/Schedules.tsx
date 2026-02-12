@@ -523,6 +523,15 @@ export default function Schedules() {
     // toggle
     if (quickChip === chip) {
       setQuickChip("none");
+      if (chip === "myPending") {
+        setFilterMineOnly(false);
+        setFilterStatus("all");
+        setFilterTime("future");
+      } else {
+        setFilterDateFrom("");
+        setFilterDateTo("");
+        setFilterTime("future");
+      }
       return;
     }
 

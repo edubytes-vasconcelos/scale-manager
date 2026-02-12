@@ -68,9 +68,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [volunteer, setVolunteer] = useState<VolunteerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const initialLoadDoneRef = useRef(false);
   const [syncingProfile, setSyncingProfile] = useState(false);
   const lastLoggedInSession = useRef<string | null>(null);
+  const isSigningOut = useRef(false);
+  const hadAuthenticatedSession = useRef(false);
+
+  const canAuditLoginByToken = useCallback(
+    (authUserId: string, accessToken: string) => {
+      if (!accessToken || typeof window === "undefined") return false;
+      const key = `audit:last_login_token:${authUserId}`;
+      const previous = window.localStorage.getItem(key);
+      return previous !== accessToken;
+    },
+    []
+  );
+
+  const markLoginAudited = useCallback(
+    (authUserId: string, accessToken: string) => {
+      if (typeof window === "undefined") return;
+      const key = `audit:last_login_token:${authUserId}`;
+      window.localStorage.setItem(key, accessToken);
+    },
+    []
+  );
+
+  const clearAuditedLoginToken = useCallback((authUserId?: string | null) => {
+    if (!authUserId || typeof window === "undefined") return;
+    window.localStorage.removeItem(`audit:last_login_token:${authUserId}`);
+  }, []);
 
   const { toast } = useToast();
 
@@ -137,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isInitial = false,
       authEvent?: string
     ) => {
-      const shouldBlockUi = isInitial || !initialLoadDone;
+      const shouldBlockUi = isInitial || !initialLoadDoneRef.current;
       if (shouldBlockUi) {
         setLoading(true);
         setAuthReady(false);
@@ -146,10 +172,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!currentSession?.user) {
+        hadAuthenticatedSession.current = false;
         setSession(null);
         setUser(null);
         setVolunteer(null);
-        if (isInitial) setInitialLoadDone(true);
+        if (isInitial) initialLoadDoneRef.current = true;
         if (shouldBlockUi) {
           setLoading(false);
           setAuthReady(true);
@@ -170,11 +197,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       setVolunteer(profile);
+      const becameAuthenticated = !hadAuthenticatedSession.current;
+      hadAuthenticatedSession.current = true;
+      const canAuditFromEvent =
+        authEvent === "SIGNED_IN" || authEvent === "INITIAL_SESSION" || isInitial;
       if (
-        authEvent === "SIGNED_IN" &&
         profile?.organizationId &&
-        lastLoggedInSession.current !== currentSession.access_token
+        (becameAuthenticated || canAuditFromEvent) &&
+        lastLoggedInSession.current !== currentSession.access_token &&
+        canAuditLoginByToken(currentSession.user.id, currentSession.access_token)
       ) {
+        // Set ref BEFORE await to block concurrent calls (getSession + INITIAL_SESSION + SIGNED_IN)
         lastLoggedInSession.current = currentSession.access_token;
         await auditAuthAccessEvent({
           organizationId: profile.organizationId,
@@ -182,12 +215,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           actorVolunteerId: profile.id,
           event: "login",
           metadata: {
-            source: "auth_state_change",
+            source: authEvent || (isInitial ? "initial_session" : "auth_state_change"),
+            tokenPrefix: currentSession.access_token.slice(0, 12),
           },
         });
+        // Persist to localStorage AFTER success — so page-reload retries work if insert failed
+        markLoginAudited(currentSession.user.id, currentSession.access_token);
       }
 
-      if (isInitial) setInitialLoadDone(true);
+      if (isInitial) initialLoadDoneRef.current = true;
       if (shouldBlockUi) {
         setLoading(false);
         setAuthReady(true);
@@ -195,7 +231,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSyncingProfile(false);
       }
     },
-    [claimProfile, fetchVolunteerProfile, initialLoadDone]
+    [
+      claimProfile,
+      fetchVolunteerProfile,
+      canAuditLoginByToken,
+      markLoginAudited,
+    ]
   );
 
   /* ---------------------------------------------------------
@@ -209,20 +250,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (initialLoadDone) {
-        loadUserData(session, false, event);
-      }
+      // Processa sempre para não perder SIGNED_IN durante bootstrap.
+      loadUserData(session, false, event);
     });
 
     return () => subscription.unsubscribe();
-  }, [loadUserData, initialLoadDone]);
+  }, [loadUserData]);
 
   /* ---------------------------------------------------------
      Sign out
   --------------------------------------------------------- */
   const signOut = async () => {
+    if (isSigningOut.current) return;
+    isSigningOut.current = true;
+
     const currentVolunteer = volunteer;
     const currentUser = user;
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      toast({
+        title: "Erro ao sair",
+        description: error.message,
+        variant: "destructive",
+      });
+      isSigningOut.current = false;
+      return;
+    }
+
     if (currentVolunteer?.organizationId && currentUser?.id) {
       await auditAuthAccessEvent({
         organizationId: currentVolunteer.organizationId,
@@ -235,21 +291,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      toast({
-        title: "Erro ao sair",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
     setSession(null);
     setUser(null);
     setVolunteer(null);
     lastLoggedInSession.current = null;
+    clearAuditedLoginToken(currentUser?.id);
+    isSigningOut.current = false;
   };
 
   /* ---------------------------------------------------------

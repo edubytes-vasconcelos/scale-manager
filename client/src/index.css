@@ -92,4 +92,15 @@
     @apply bg-background text-foreground;
     font-family: "DM Sans", "Outfit", system-ui, sans-serif;
   }
+
+  /* Improve native date icon contrast in dark mode */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.75;
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    filter: invert(1) brightness(1.2) contrast(1.1);
+  }
 }
