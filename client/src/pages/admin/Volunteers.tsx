@@ -91,11 +91,11 @@ const accessLevelLabels: Record<string, string> = {
 
 const accessLevelClasses: Record<string, string> = {
   admin:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border dark:border-emerald-400/30",
+    "!bg-emerald-100 !text-emerald-800 !border-emerald-200 dark:!bg-emerald-900/55 dark:!text-emerald-100 dark:!border-emerald-700",
   leader:
-    "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300 dark:border dark:border-sky-400/30",
+    "!bg-sky-100 !text-sky-800 !border-sky-200 dark:!bg-sky-900/55 dark:!text-sky-100 dark:!border-sky-700",
   volunteer:
-    "bg-muted text-foreground dark:bg-muted/70 dark:border dark:border-border/60",
+    "!bg-slate-100 !text-slate-700 !border-slate-200 dark:!bg-slate-800 dark:!text-slate-100 dark:!border-slate-600",
 };
 
 function getAccessLevelBadge(accessLevel?: string | null) {
@@ -534,7 +534,7 @@ const safeAssignments = isAdmin
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground dark:text-slate-100 flex items-center gap-2">
           <Users className="w-6 h-6" /> Voluntários
         </h1>
 
@@ -564,10 +564,10 @@ const safeAssignments = isAdmin
             placeholder="Buscar por nome, email ou WhatsApp"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-64"
+            className="w-full sm:w-64 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
           />
           <Select value={filterAccessLevel} onValueChange={setFilterAccessLevel}>
-            <SelectTrigger className="w-full sm:w-40">
+            <SelectTrigger className="w-full sm:w-40 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100">
               <SelectValue placeholder="Nível" />
             </SelectTrigger>
             <SelectContent>
@@ -578,7 +578,7 @@ const safeAssignments = isAdmin
             </SelectContent>
           </Select>
           <Select value={filterMinistry} onValueChange={setFilterMinistry}>
-            <SelectTrigger className="w-full sm:w-52">
+            <SelectTrigger className="w-full sm:w-52 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100">
               <SelectValue placeholder="Ministério" />
             </SelectTrigger>
             <SelectContent>
@@ -591,7 +591,7 @@ const safeAssignments = isAdmin
             </SelectContent>
           </Select>
         </div>
-        <Badge variant="outline" className="text-xs">
+        <Badge variant="outline" className="text-xs dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200">
           {filteredVolunteers.length} voluntários
         </Badge>
       </div>
@@ -639,7 +639,7 @@ const safeAssignments = isAdmin
           return (
             <Card
               key={v.id}
-              className="group rounded-2xl border border-border/80 bg-card shadow-sm overflow-hidden transition hover:shadow-md focus-within:shadow-md"
+              className="group rounded-2xl border border-border/80 bg-card shadow-sm overflow-hidden transition hover:shadow-md focus-within:shadow-md dark:bg-slate-900/70 dark:border-slate-700/70 dark:hover:border-slate-600"
             >
               <CardHeader className="flex flex-row gap-3 pb-3">
                 <div className="relative shrink-0">
@@ -660,11 +660,11 @@ const safeAssignments = isAdmin
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-base truncate" title={v.name}>
+                  <CardTitle className="text-base truncate text-foreground dark:text-slate-200" title={v.name}>
                     {v.name}
                   </CardTitle>
                   <p
-                    className="text-sm text-muted-foreground dark:text-foreground/75 truncate"
+                    className="text-sm text-muted-foreground dark:text-slate-300 truncate"
                     title={v.email || undefined}
                   >
                     {v.email}
@@ -711,16 +711,17 @@ const safeAssignments = isAdmin
 
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Badge className={accessBadge.className}>
+                  <Badge variant="outline" className={accessBadge.className}>
                     <UserCheck className="w-3 h-3 mr-1" />
                     {accessBadgeLabel}
                   </Badge>
 
                   <Badge
+                    variant="outline"
                     className={
                       isActive
-                        ? "bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border dark:border-emerald-400/30"
-                        : "bg-yellow-100 text-yellow-800 dark:bg-amber-500/15 dark:text-amber-300 dark:border dark:border-amber-400/30"
+                        ? "!bg-green-100 !text-green-800 !border-green-200 dark:!bg-emerald-900/55 dark:!text-emerald-100 dark:!border-emerald-700"
+                        : "!bg-yellow-100 !text-yellow-800 !border-yellow-200 dark:!bg-amber-900/55 dark:!text-amber-100 dark:!border-amber-700"
                     }
                   >
                     {isActive ? (
@@ -740,7 +741,7 @@ const safeAssignments = isAdmin
                 {v.canManagePreachingSchedule && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge className="bg-indigo-100 text-indigo-800 dark:bg-violet-500/15 dark:text-violet-300 dark:border dark:border-violet-400/30">
+                      <Badge variant="outline" className="!bg-indigo-100 !text-indigo-800 !border-indigo-200 dark:!bg-violet-900/55 dark:!text-violet-100 dark:!border-violet-700">
                         Gerencia pregação
                       </Badge>
                     </TooltipTrigger>
@@ -762,7 +763,7 @@ const safeAssignments = isAdmin
                       <Badge
                         key={a.ministryId}
                         variant="outline"
-                        className="text-xs flex items-center gap-1"
+                        className="text-xs flex items-center gap-1 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
                       >
                         {renderMinistryIcon(ministry.icon)}
                         {ministry.name}

@@ -1,5 +1,6 @@
 import { useAuth } from "@/providers/AuthProvider";
 import { useVolunteerProfile } from "@/hooks/use-data";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { Link, useLocation } from "wouter";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
@@ -16,12 +17,15 @@ import {
   Home,
   Settings,
   Activity,
+  Bell,
   Sun,
   Moon,
   Download,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isPWAInstalled, showInstallPrompt } from "@/lib/pwa";
 
 /* =========================
@@ -158,6 +162,7 @@ export default function AppLayout({
 }) {
   const { signOut, syncingProfile } = useAuth();
   const { data: profile } = useVolunteerProfile();
+  const push = usePushNotifications();
   const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [canInstall, setCanInstall] = useState(false);
@@ -252,6 +257,72 @@ export default function AppLayout({
                   <Download className="w-4 h-4 mr-2" />
                   Instalar
                 </Button>
+              )}
+              {push.pushSupported && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="icon" variant="ghost" aria-label="Notificações">
+                      <Bell className={`w-5 h-5 ${push.pushEnabled ? "text-primary" : ""}`} />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-80 p-3 !bg-background !text-foreground border-border shadow-xl !opacity-100 backdrop-blur-none"
+                    align="end"
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold">Alertas</p>
+                        <p className="text-xs text-muted-foreground">
+                          Receba avisos quando novas escalas forem criadas.
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {push.pushPermission === "denied"
+                          ? "Permissão bloqueada no navegador."
+                          : push.pushEnabled
+                            ? "Notificações ativadas neste dispositivo."
+                            : "Notificações desativadas neste dispositivo."}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={push.handleTestPush}
+                          disabled={!push.pushEnabled}
+                        >
+                          Testar alerta
+                        </Button>
+                        {push.pushEnabled ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={push.handleDisablePush}
+                            disabled={push.pushLoading}
+                          >
+                            {push.pushLoading && (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            )}
+                            Desativar alertas
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="h-8"
+                            onClick={push.handleEnablePush}
+                            disabled={push.pushLoading || push.pushPermission === "denied"}
+                          >
+                            {push.pushLoading && (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            )}
+                            Ativar alertas
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
               <Button
                 size="icon"
@@ -385,6 +456,72 @@ export default function AppLayout({
                     <Download className="w-4 h-4 mr-2" />
                     Instalar app
                   </Button>
+                )}
+                {push.pushSupported && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button size="icon" variant="ghost" aria-label="Notificações">
+                        <Bell className={`w-4 h-4 ${push.pushEnabled ? "text-primary" : ""}`} />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-80 p-3 !bg-background !text-foreground border-border shadow-xl !opacity-100 backdrop-blur-none"
+                      align="end"
+                    >
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold">Alertas</p>
+                          <p className="text-xs text-muted-foreground">
+                            Receba avisos quando novas escalas forem criadas.
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {push.pushPermission === "denied"
+                            ? "Permissão bloqueada no navegador."
+                            : push.pushEnabled
+                              ? "Notificações ativadas neste dispositivo."
+                              : "Notificações desativadas neste dispositivo."}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={push.handleTestPush}
+                            disabled={!push.pushEnabled}
+                          >
+                            Testar alerta
+                          </Button>
+                          {push.pushEnabled ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              onClick={push.handleDisablePush}
+                              disabled={push.pushLoading}
+                            >
+                              {push.pushLoading && (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              )}
+                              Desativar alertas
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-8"
+                              onClick={push.handleEnablePush}
+                              disabled={push.pushLoading || push.pushPermission === "denied"}
+                            >
+                              {push.pushLoading && (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              )}
+                              Ativar alertas
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 )}
                 <Button
                   size="icon"

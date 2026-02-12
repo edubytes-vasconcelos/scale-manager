@@ -26,13 +26,11 @@ import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
 import { normalizeAssignments } from "@/lib/assignments";
-import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { NextScheduleCard } from "@/components/dashboard/NextScheduleCard";
 import { PendingAlert } from "@/components/dashboard/PendingAlert";
-import { PushNotificationSection } from "@/components/dashboard/PushNotificationSection";
 import { MySchedulesList } from "@/components/dashboard/MySchedulesList";
 import { UnavailabilitySection } from "@/components/dashboard/UnavailabilitySection";
 import { UpcomingServices } from "@/components/dashboard/UpcomingServices";
@@ -51,8 +49,6 @@ export default function Dashboard() {
   const { data: mySchedules, isLoading: loadingMySchedules } =
     useMySchedules(volunteer?.id, volunteer?.organizationId);
   const updateStatus = useUpdateAssignmentStatus();
-
-  const push = usePushNotifications();
 
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineNote, setDeclineNote] = useState("");
@@ -342,16 +338,6 @@ export default function Dashboard() {
         )}
 
         <PendingAlert count={pendingSchedules.length} />
-
-        <PushNotificationSection
-          pushSupported={push.pushSupported}
-          pushEnabled={push.pushEnabled}
-          pushLoading={push.pushLoading}
-          pushPermission={push.pushPermission}
-          onEnable={push.handleEnablePush}
-          onDisable={push.handleDisablePush}
-          onTest={push.handleTestPush}
-        />
 
         <MySchedulesList
           schedules={filteredSchedules}
