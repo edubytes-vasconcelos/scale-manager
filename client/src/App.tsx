@@ -21,6 +21,7 @@ import EventTypes from "@/pages/admin/EventTypes";
 import Teams from "@/pages/admin/Teams";
 import Schedules from "@/pages/admin/Schedules";
 import ChurchSettings from "@/pages/admin/ChurchSettings";
+import AccessAudit from "@/pages/admin/AccessAudit";
 
 import AppLayout from "@/components/AppLayout";
 
@@ -44,6 +45,19 @@ function AppShellSkeleton({ message }: { message: string }) {
 }
 
 type Role = "admin" | "leader" | "volunteer";
+
+function normalizeRole(raw?: string | null): Role | null {
+  if (!raw) return null;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "admin") return "admin";
+  if (normalized === "leader" || normalized === "lider" || normalized === "líder") {
+    return "leader";
+  }
+  if (normalized === "volunteer" || normalized === "voluntario" || normalized === "voluntário") {
+    return "volunteer";
+  }
+  return null;
+}
 
 function ProtectedRoute({
   component: Component,
@@ -82,7 +96,8 @@ function ProtectedRoute({
     return <Onboarding />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(volunteer.accessLevel as Role)) {
+  const currentRole = normalizeRole(volunteer.accessLevel);
+  if (allowedRoles && (!currentRole || !allowedRoles.includes(currentRole))) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center gap-4 py-24 px-6 text-center">
@@ -172,6 +187,13 @@ function Router() {
         <ProtectedRoute
           allowedRoles={["admin", "leader"]}
           component={() => <AdminPageWrapper Component={Teams} />}
+        />
+      </Route>
+
+      <Route path="/admin/access-audit">
+        <ProtectedRoute
+          allowedRoles={["admin"]}
+          component={() => <AdminPageWrapper Component={AccessAudit} />}
         />
       </Route>
 

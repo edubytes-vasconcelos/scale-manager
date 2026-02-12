@@ -5,10 +5,12 @@ import {
   useState,
   ReactNode,
   useCallback,
+  useRef,
 } from "react";
 import { supabase } from "@/lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import { auditAuthAccessEvent } from "@/lib/auth-access-audit";
 
 /* =========================================================
    Types
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [syncingProfile, setSyncingProfile] = useState(false);
+  const lastLoggedInSession = useRef<string | null>(null);
 
   const { toast } = useToast();
 
@@ -129,7 +132,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      Load user + volunteer data
   --------------------------------------------------------- */
   const loadUserData = useCallback(
-    async (currentSession: Session | null, isInitial = false) => {
+    async (
+      currentSession: Session | null,
+      isInitial = false,
+      authEvent?: string
+    ) => {
       const shouldBlockUi = isInitial || !initialLoadDone;
       if (shouldBlockUi) {
         setLoading(true);
@@ -163,6 +170,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       setVolunteer(profile);
+      if (
+        authEvent === "SIGNED_IN" &&
+        profile?.organizationId &&
+        lastLoggedInSession.current !== currentSession.access_token
+      ) {
+        lastLoggedInSession.current = currentSession.access_token;
+        await auditAuthAccessEvent({
+          organizationId: profile.organizationId,
+          actorAuthUserId: currentSession.user.id,
+          actorVolunteerId: profile.id,
+          event: "login",
+          metadata: {
+            source: "auth_state_change",
+          },
+        });
+      }
 
       if (isInitial) setInitialLoadDone(true);
       if (shouldBlockUi) {
@@ -185,9 +208,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (initialLoadDone) {
-        loadUserData(session, false);
+        loadUserData(session, false, event);
       }
     });
 
@@ -198,6 +221,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      Sign out
   --------------------------------------------------------- */
   const signOut = async () => {
+    const currentVolunteer = volunteer;
+    const currentUser = user;
+    if (currentVolunteer?.organizationId && currentUser?.id) {
+      await auditAuthAccessEvent({
+        organizationId: currentVolunteer.organizationId,
+        actorAuthUserId: currentUser.id,
+        actorVolunteerId: currentVolunteer.id,
+        event: "logout",
+        metadata: {
+          source: "manual_signout",
+        },
+      });
+    }
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -212,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setUser(null);
     setVolunteer(null);
+    lastLoggedInSession.current = null;
   };
 
   /* ---------------------------------------------------------

@@ -44,3 +44,5 @@ export {
   useUnreadMessageCount,
   useMarkMessagesAsRead,
 } from "./use-chat";
+
+export { useAuthAccessEvents } from "./use-auth-access";

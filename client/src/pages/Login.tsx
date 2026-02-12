@@ -234,16 +234,20 @@ export default function Login() {
     return `${minutes}:${seconds}`;
   }, [codeExpiresIn]);
 
+  const inputClassName =
+    "h-11 rounded-xl border-slate-300/90 bg-white/95 text-slate-900 placeholder:text-slate-500 focus-visible:ring-primary/40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:ring-primary/50";
+  const labelClassName = "text-sm font-semibold text-foreground/80 dark:text-slate-200 ml-1";
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-400/5 rounded-full blur-3xl" />
+        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/10 dark:bg-primary/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-400/10 dark:bg-blue-500/20 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl shadow-black/5 border border-white/50 dark:border-slate-700 p-8 md:p-10">
-          <div className="text-center mb-10">
+        <div className="bg-white/95 dark:bg-slate-900/90 rounded-3xl shadow-2xl shadow-black/10 dark:shadow-black/40 border border-white/50 dark:border-slate-700/70 p-8 md:p-10 backdrop-blur">
+          <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-6">
               <img
                 src="/brand/logo-256.png"
@@ -252,10 +256,10 @@ export default function Login() {
                 draggable={false}
               />
             </div>
-            <h1 className="text-3xl font-bold text-foreground mb-2 tracking-tight font-display">
+            <h1 className="text-3xl font-bold text-foreground dark:text-slate-50 mb-2 tracking-tight font-display">
               {isSignUp ? "Criar Conta" : "Área de Membros"}
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground dark:text-slate-300 text-sm">
               Gestor de Escalas - IASD Bosque
             </p>
           </div>
@@ -265,6 +269,11 @@ export default function Login() {
               type="button"
               variant={authMethod === "email" ? "default" : "outline"}
               onClick={switchToEmail}
+              className={`h-10 font-semibold ${
+                authMethod === "email"
+                  ? ""
+                  : "dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
+              }`}
             >
               Email
             </Button>
@@ -272,19 +281,24 @@ export default function Login() {
               type="button"
               variant={authMethod === "whatsapp" ? "default" : "outline"}
               onClick={switchToWhatsapp}
+              className={`h-10 font-semibold ${
+                authMethod === "whatsapp"
+                  ? ""
+                  : "dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
+              }`}
             >
               WhatsApp
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mb-6">
+          <p className="text-xs text-muted-foreground dark:text-slate-400 mb-5">
             Sem e-mail? Use o WhatsApp para receber um código de acesso.
           </p>
 
           {authMethod === "email" ? (
-            <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-5">
+            <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-4">
             {isSignUp && (
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground/80 ml-1">
+                <label className={labelClassName}>
                   Nome Completo
                 </label>
                 <Input
@@ -293,13 +307,14 @@ export default function Login() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Seu nome completo"
+                  className={inputClassName}
                   data-testid="input-signup-name"
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground/80 ml-1">
+              <label className={labelClassName}>
                 E-mail
               </label>
               <Input
@@ -308,12 +323,13 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
+                className={inputClassName}
                 data-testid="input-email"
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground/80 ml-1">
+              <label className={labelClassName}>
                 Senha
               </label>
               <Input
@@ -322,6 +338,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="********"
+                className={inputClassName}
                 data-testid="input-password"
               />
               {isSignUp && (
@@ -329,12 +346,12 @@ export default function Login() {
               )}
             </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full py-6 text-lg mt-4"
-              data-testid={isSignUp ? "button-signup" : "button-login"}
-            >
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-14 text-lg mt-3 rounded-xl bg-primary hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/90 dark:text-primary-foreground shadow-lg shadow-primary/20 dark:shadow-primary/25"
+                data-testid={isSignUp ? "button-signup" : "button-login"}
+              >
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -349,9 +366,9 @@ export default function Login() {
             </Button>
           </form>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground/80 ml-1">
+                <label className={labelClassName}>
                   WhatsApp
                 </label>
                 <Input
@@ -359,26 +376,28 @@ export default function Login() {
                   value={whatsappPhone}
                   onChange={(e) => setWhatsappPhone(formatPhone(e.target.value))}
                   placeholder="(11) 91234-5678"
+                  className={inputClassName}
                   data-testid="input-whatsapp-phone"
                 />
-                <p className="text-xs text-muted-foreground ml-1">
+                <p className="text-xs text-muted-foreground dark:text-slate-400 ml-1">
                   Digite seu WhatsApp para receber o código de verificação.
                 </p>
               </div>
 
               {whatsappSent && (
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground/80 ml-1">
+                  <label className={labelClassName}>
                     Código
                   </label>
                   <Input
                     value={whatsappCode}
                     onChange={(e) => setWhatsappCode(e.target.value)}
                     placeholder="Digite o código recebido"
+                    className={inputClassName}
                     data-testid="input-whatsapp-code"
                     ref={codeInputRef}
                   />
-                  <p className="text-xs text-muted-foreground ml-1">
+                  <p className="text-xs text-muted-foreground dark:text-slate-400 ml-1">
                     O código expira em {codeExpiresLabel}.
                   </p>
                 </div>
@@ -395,11 +414,11 @@ export default function Login() {
                   variant="outline"
                   onClick={handleRequestWhatsappCode}
                   disabled={whatsappLoading || whatsappCountdown > 0}
-                  className={
+                  className={`h-11 ${
                     whatsappCountdown === 0 && !whatsappSent && codeRequestedAt > 0
                       ? "border-destructive text-destructive hover:text-destructive"
-                      : undefined
-                  }
+                      : "dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                  }`}
                 >
                   {whatsappLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   {whatsappSent
@@ -412,6 +431,7 @@ export default function Login() {
                   type="button"
                   onClick={handleVerifyWhatsappCode}
                   disabled={!whatsappSent || whatsappLoading}
+                  className="h-12 rounded-xl bg-primary hover:bg-primary/90 text-white dark:bg-primary dark:hover:bg-primary/90 dark:text-white disabled:opacity-100 disabled:bg-slate-700 disabled:text-slate-300"
                 >
                   {whatsappLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Entrar
@@ -443,9 +463,9 @@ export default function Login() {
             </div>
           )}
 
-          <div className="relative my-6">
+          <div className="relative my-5">
             <Separator className="my-4" />
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-slate-800 px-3 text-xs text-muted-foreground">
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/95 dark:bg-slate-900 px-3 text-xs text-muted-foreground">
               ou continue com
             </span>
           </div>
@@ -455,7 +475,7 @@ export default function Login() {
             variant="outline"
             onClick={handleGoogleLogin}
             disabled={socialLoading || loading}
-            className="w-full py-5"
+            className="w-full h-14 rounded-xl dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
             data-testid="button-google-login"
           >
             {socialLoading ? (
@@ -466,7 +486,7 @@ export default function Login() {
             Google
           </Button>
           
-          <div className="mt-8 text-center space-y-3">
+          <div className="mt-7 text-center space-y-2.5">
             {authMethod === "email" && (
               <button
                 type="button"

@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Home,
   Settings,
+  Activity,
   Sun,
   Moon,
   Download,
@@ -28,6 +29,19 @@ import { isPWAInstalled, showInstallPrompt } from "@/lib/pwa";
 ========================= */
 
 type Role = "admin" | "leader" | "volunteer";
+
+function normalizeRole(raw?: string | null): Role | null {
+  if (!raw) return null;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "admin") return "admin";
+  if (normalized === "leader" || normalized === "lider" || normalized === "líder") {
+    return "leader";
+  }
+  if (normalized === "volunteer" || normalized === "voluntario" || normalized === "voluntário") {
+    return "volunteer";
+  }
+  return null;
+}
 
 /* =========================
    NAV ITEMS (ROLE BASED)
@@ -72,6 +86,13 @@ const navItems: {
     icon: Settings,
     roles: ["admin", "leader"],
     breadcrumb: ["Admin", "Igreja"],
+  },
+  {
+    path: "/admin/access-audit",
+    label: "Acessos",
+    icon: Activity,
+    roles: ["admin"],
+    breadcrumb: ["Admin", "Acessos"],
   },
   {
     path: "/admin/teams",
@@ -177,7 +198,7 @@ export default function AppLayout({
     if (installed) setCanInstall(false);
   };
 
-  const userRole = profile?.accessLevel as Role | undefined;
+  const userRole = normalizeRole(profile?.accessLevel);
   const canManagePreachingSchedule = profile?.canManagePreachingSchedule ?? false;
 
   /**
