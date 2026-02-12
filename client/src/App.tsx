@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import InstallPWA from "@/components/InstallPWA";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Redirect } from "wouter";
@@ -7,23 +8,22 @@ import { Toaster } from "@/components/ui/toaster";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { Loader2, ShieldAlert } from "lucide-react";
+import AppLayout from "@/components/AppLayout";
 
-import NotFound from "@/pages/not-found";
 import Login from "@/pages/Login";
-import ForgotPassword from "@/pages/ForgotPassword";
-import ResetPassword from "@/pages/ResetPassword";
-import Dashboard from "@/pages/Dashboard";
 import Onboarding from "@/pages/Onboarding";
 
-import Volunteers from "@/pages/admin/Volunteers";
-import Ministries from "@/pages/admin/Ministries";
-import EventTypes from "@/pages/admin/EventTypes";
-import Teams from "@/pages/admin/Teams";
-import Schedules from "@/pages/admin/Schedules";
-import ChurchSettings from "@/pages/admin/ChurchSettings";
-import AccessAudit from "@/pages/admin/AccessAudit";
-
-import AppLayout from "@/components/AppLayout";
+const NotFound = lazy(() => import("@/pages/not-found"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Volunteers = lazy(() => import("@/pages/admin/Volunteers"));
+const Ministries = lazy(() => import("@/pages/admin/Ministries"));
+const EventTypes = lazy(() => import("@/pages/admin/EventTypes"));
+const Teams = lazy(() => import("@/pages/admin/Teams"));
+const Schedules = lazy(() => import("@/pages/admin/Schedules"));
+const ChurchSettings = lazy(() => import("@/pages/admin/ChurchSettings"));
+const AccessAudit = lazy(() => import("@/pages/admin/AccessAudit"));
 
 function AppShellSkeleton({ message }: { message: string }) {
   return (
@@ -211,7 +211,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ErrorBoundary>
-          <Router />
+          <Suspense fallback={<AppShellSkeleton message="Carregando..." />}>
+            <Router />
+          </Suspense>
         </ErrorBoundary>
         <Toaster />
         <InstallPWA />

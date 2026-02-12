@@ -10,10 +10,15 @@ export function useServices(organizationId: string | null | undefined) {
     queryFn: async () => {
       if (!organizationId) return [];
 
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const cutoffDate = sixMonthsAgo.toISOString().slice(0, 10);
+
       const { data, error } = await supabase
         .from("services")
         .select("*")
         .eq("organization_id", organizationId)
+        .gte("date", cutoffDate)
         .order("date", { ascending: true });
 
       if (error) throw error;

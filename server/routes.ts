@@ -1,13 +1,9 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import type { Server } from "http";
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  _app: Express
 ): Promise<Server> {
-  // No server-side routes needed for this MVP
-  // The app uses Supabase client-side directly
-  
   return httpServer;
 }

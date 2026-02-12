@@ -96,10 +96,13 @@ export function useVolunteerUnavailability(organizationId: string | null | undef
     queryKey: ["volunteer_unavailability", organizationId],
     queryFn: async () => {
       if (!organizationId) return [];
+      const today = new Date().toISOString().slice(0, 10);
+
       const { data, error } = await supabase
         .from("volunteer_unavailability")
         .select("*")
         .eq("organization_id", organizationId)
+        .gte("end_date", today)
         .order("start_date", { ascending: true });
 
       if (error) throw error;

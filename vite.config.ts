@@ -19,7 +19,21 @@ export default defineConfig({
 
   build: {
     outDir: "../dist",
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("@radix-ui")) return "vendor-radix";
+            if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+            if (id.includes("framer-motion")) return "vendor-motion";
+            if (id.includes("@supabase")) return "vendor-supabase";
+            if (id.includes("react-dom")) return "vendor-react";
+            if (id.includes("date-fns")) return "vendor-date";
+          }
+        },
+      },
+    },
   },
 
   publicDir: "public",
