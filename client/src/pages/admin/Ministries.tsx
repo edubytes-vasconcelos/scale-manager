@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useVolunteerProfile, useMinistries, useCreateMinistry, useUpdateMinistry } from "@/hooks/use-data";
 import type { Ministry } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Church, Music, Heart, BookOpen, Users, Mic2, Hand, Coffee, Baby, Sparkles, Plus, Loader2, Pencil, Camera } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingCardGrid } from "@/components/LoadingCardGrid";
 
 const iconOptions = [
   { value: "church", label: "Igreja", Icon: Church },
@@ -178,17 +180,13 @@ export default function Ministries() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 rounded-xl bg-slate-100 animate-pulse" />
-          ))}
-        </div>
+        <LoadingCardGrid count={4} height="h-24" columns={3} />
       ) : filteredMinistries && filteredMinistries.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredMinistries.map((ministry) => {
             const Icon = getIcon(ministry.icon);
             return (
-              <Card key={ministry.id} data-testid={`card-ministry-${ministry.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
+              <Card key={ministry.id} data-testid={`card-ministry-${ministry.id}`} className="rounded-2xl border-border bg-card shadow-sm">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -212,17 +210,11 @@ export default function Ministries() {
           })}
         </div>
       ) : (
-        <Card className="border-dashed border-slate-200 bg-white">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-3">
-              <Church className="w-7 h-7 text-slate-300" />
-            </div>
-            <p className="text-base font-medium text-foreground">Nenhum ministério encontrado</p>
-            <p className="text-muted-foreground text-sm">
-              {searchTerm ? "Ajuste a busca para ver outros resultados." : "Adicione ministérios à sua organização."}
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Church}
+          title="Nenhum ministério encontrado"
+          description={searchTerm ? "Ajuste a busca para ver outros resultados." : "Adicione ministérios à sua organização."}
+        />
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -298,3 +290,4 @@ export default function Ministries() {
     </div>
   );
 }
+

@@ -1,4 +1,5 @@
 import InstallPWA from "@/components/InstallPWA";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -187,7 +188,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
+        <ErrorBoundary>
+          <Router />
+        </ErrorBoundary>
         <Toaster />
         <InstallPWA />
       </AuthProvider>

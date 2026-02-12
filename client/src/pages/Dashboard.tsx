@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import {
   useVolunteerProfile,
   useServices,
@@ -9,25 +9,9 @@ import {
   useCreateVolunteerUnavailability,
   useDeleteVolunteerUnavailability,
 } from "@/hooks/use-data";
-import { ServiceCard } from "@/components/ServiceCard";
-import {
-  CalendarDays,
-  User,
-  Building2,
-  ClipboardCheck,
-  Check,
-  X,
-  Loader2,
-  Clock,
-  AlertCircle,
-  CheckCircle2,
-  Bell,
-} from "lucide-react";
+import { X, Loader2, Clock, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -36,24 +20,22 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { format, isAfter, addDays, parseISO, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/AppLayout";
-import { supabase } from "@/lib/supabase";
-import { urlBase64ToUint8Array } from "@/lib/push";
 import { normalizeAssignments } from "@/lib/assignments";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
+
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
+import { DashboardStats } from "@/components/dashboard/DashboardStats";
+import { NextScheduleCard } from "@/components/dashboard/NextScheduleCard";
+import { PendingAlert } from "@/components/dashboard/PendingAlert";
+import { PushNotificationSection } from "@/components/dashboard/PushNotificationSection";
+import { MySchedulesList } from "@/components/dashboard/MySchedulesList";
+import { UnavailabilitySection } from "@/components/dashboard/UnavailabilitySection";
+import { UpcomingServices } from "@/components/dashboard/UpcomingServices";
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -70,24 +52,11 @@ export default function Dashboard() {
     useMySchedules(volunteer?.id, volunteer?.organizationId);
   const updateStatus = useUpdateAssignmentStatus();
 
+  const push = usePushNotifications();
+
   const [declineDialogOpen, setDeclineDialogOpen] = useState(false);
   const [declineNote, setDeclineNote] = useState("");
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(
-    null
-  );
-  const [unavailabilityStart, setUnavailabilityStart] = useState("");
-  const [unavailabilityEnd, setUnavailabilityEnd] = useState("");
-  const [unavailabilityReason, setUnavailabilityReason] = useState("");
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [showNotifications, setShowNotifications] = useState(true);
-  const [showUnavailabilitySection, setShowUnavailabilitySection] = useState(true);
   const [scheduleFilter, setScheduleFilter] = useState<"all" | "pending" | "confirmed">("all");
-
-  const [pushSupported, setPushSupported] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
-  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default");
-  const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
 
   const firstName = volunteer?.name?.split(" ")[0] || "Voluntário";
 
@@ -183,7 +152,6 @@ export default function Dashboard() {
       });
       setDeclineDialogOpen(false);
       setDeclineNote("");
-      setSelectedScheduleId(null);
     } catch {
       toast({
         title: "Erro",
@@ -192,6 +160,8 @@ export default function Dashboard() {
       });
     }
   };
+
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
   const openDeclineDialog = (scheduleId: string) => {
     setSelectedScheduleId(scheduleId);
@@ -226,9 +196,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleAddUnavailability = async () => {
+  const handleAddUnavailability = async (data: { startDate: string; endDate: string; reason: string }) => {
     if (!volunteer?.organizationId || !volunteer?.id) return;
-    if (!unavailabilityStart || !unavailabilityEnd) {
+    if (!data.startDate || !data.endDate) {
       toast({
         title: "Período obrigatório",
         description: "Informe a data inicial e final.",
@@ -237,7 +207,7 @@ export default function Dashboard() {
       return;
     }
 
-    if (unavailabilityEnd < unavailabilityStart) {
+    if (data.endDate < data.startDate) {
       toast({
         title: "Período inválido",
         description: "A data final deve ser igual ou maior que a inicial.",
@@ -250,13 +220,10 @@ export default function Dashboard() {
       await createUnavailability.mutateAsync({
         organizationId: volunteer.organizationId,
         volunteerId: volunteer.id,
-        startDate: unavailabilityStart,
-        endDate: unavailabilityEnd,
-        reason: unavailabilityReason.trim() || null,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        reason: data.reason.trim() || null,
       });
-      setUnavailabilityStart("");
-      setUnavailabilityEnd("");
-      setUnavailabilityReason("");
       toast({
         title: "Indisponibilidade registrada",
         description: "Período adicionado com sucesso.",
@@ -286,181 +253,6 @@ export default function Dashboard() {
         description: "Não foi possível remover.",
         variant: "destructive",
       });
-    } finally {
-      setDeleteConfirmId(null);
-    }
-  };
-
-  useEffect(() => {
-    const supported =
-      typeof window !== "undefined" &&
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      "Notification" in window;
-    setPushSupported(supported);
-
-    if (!supported) {
-      setPushPermission("unsupported");
-      return;
-    }
-
-    setPushPermission(Notification.permission);
-
-      const checkExisting = async () => {
-        try {
-          const registration = await navigator.serviceWorker.getRegistration();
-          const subscription = registration
-            ? await registration.pushManager.getSubscription()
-            : null;
-          if (subscription) setPushEnabled(true);
-
-        const { data: authData } = await supabase.auth.getUser();
-        const user = authData?.user;
-        if (!user) return;
-
-        const { data } = await supabase
-          .from("push_subscriptions")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1);
-          if (data && data.length > 0) setPushEnabled(true);
-
-          const alreadyEnabled = !!subscription || (data && data.length > 0);
-          if (!alreadyEnabled && Notification.permission !== "denied" && vapidPublicKey) {
-            await handleEnablePush();
-          }
-        } catch {
-          // ignore
-        }
-      };
-
-    checkExisting();
-  }, []);
-
-  const handleTestPush = async () => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await supabase.functions.invoke("send-push", {
-        body: {
-          userId: user.id,
-          title: "Teste de notificação",
-          body: "Se você recebeu, está tudo certo!",
-        },
-      });
-      toast({
-        title: "Teste enviado",
-        description: "Verifique se a notificação chegou.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error?.message || "Não foi possível enviar o teste.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDisablePush = async () => {
-    if (!pushSupported) return;
-    setPushLoading(true);
-    try {
-      const registration = await navigator.serviceWorker.getRegistration();
-      const subscription = registration
-        ? await registration.pushManager.getSubscription()
-        : null;
-      if (subscription) {
-        await subscription.unsubscribe();
-      }
-
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (user) {
-        await supabase.from("push_subscriptions").delete().eq("user_id", user.id);
-      }
-
-      setPushEnabled(false);
-      toast({
-        title: "Notificações desativadas",
-        description: "Você não receberá alertas neste dispositivo.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error?.message || "Não foi possível desativar.",
-        variant: "destructive",
-      });
-    } finally {
-      setPushLoading(false);
-    }
-  };
-
-  const handleEnablePush = async () => {
-    if (!pushSupported) return;
-    if (!vapidPublicKey) {
-      toast({
-        title: "VAPID não configurado",
-        description: "Defina VITE_VAPID_PUBLIC_KEY no ambiente.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setPushLoading(true);
-    try {
-      const permission = await Notification.requestPermission();
-      setPushPermission(permission);
-      if (permission !== "granted") {
-        toast({
-          title: "Permissao negada",
-          description: "Ative as notificacoes no navegador.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-        });
-      }
-
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) throw new Error("Usuário não autenticado.");
-
-      const { data: existing } = await supabase
-        .from("push_subscriptions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("subscription", subscription as any)
-        .limit(1);
-
-      if (!existing || existing.length === 0) {
-        const { error } = await supabase.from("push_subscriptions").insert({
-          user_id: user.id,
-          subscription,
-        });
-        if (error) throw error;
-      }
-
-      setPushEnabled(true);
-      toast({
-        title: "Notificações ativadas",
-        description: "Você receberá alertas de novas escalas.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro ao ativar notificações",
-        description: error?.message || "Tente novamente.",
-        variant: "destructive",
-      });
-    } finally {
-      setPushLoading(false);
     }
   };
 
@@ -495,11 +287,6 @@ export default function Dashboard() {
     return null;
   };
 
-  const handleStartDateChange = (value: string) => {
-    setUnavailabilityStart(value);
-    if (!unavailabilityEnd) setUnavailabilityEnd(value);
-  };
-
   const formatScheduleDate = (dateString: string) => {
     const date = parseISO(dateString);
     if (isToday(date)) {
@@ -529,454 +316,73 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <div className="p-6 lg:p-8 space-y-8">
-        {/* HERO */}
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/90 to-primary/70 text-primary-foreground shadow-lg px-6 py-5 md:px-8 md:py-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-[11px] font-semibold uppercase tracking-wide">
-                <CalendarDays className="w-3.5 h-3.5" />
-                Gestão de Escalas
-              </div>
-              <h1 className="text-2xl md:text-3xl font-display font-semibold tracking-tight">
-                Olá, {loadingProfile ? "..." : firstName}
-              </h1>
-              <div className="flex flex-wrap gap-3 text-xs md:text-sm opacity-90">
-                <span className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4" />
-                  {volunteer?.organization?.name || "—"}
-                </span>
-              </div>
-            </div>
-            <div className="text-xs md:text-sm bg-white/15 px-3 py-2 rounded-xl">
-              {new Date().toLocaleDateString("pt-BR", {
-                weekday: "long",
-                day: "2-digit",
-                month: "long",
-              })}
-            </div>
-          </div>
-        </section>
+        <DashboardHero
+          firstName={firstName}
+          organizationName={volunteer?.organization?.name || ""}
+          isLoading={loadingProfile}
+        />
 
-        {/* RESUMO */}
-        <section className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            {mySchedules && mySchedules.length > 0 ? (
-              <>
-                <Badge variant="warning">
-                  <Clock className="w-3.5 h-3.5 mr-1" />
-                  Pendentes {pendingSchedules.length}
-                </Badge>
-                <Badge variant="success">
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                  Confirmadas {confirmedSchedules.length}
-                </Badge>
-                <Badge variant="info">
-                  <CalendarDays className="w-3.5 h-3.5 mr-1" />
-                  Total {mySchedules.length}
-                </Badge>
-              </>
-            ) : null}
-          </div>
-
-          {pendingSchedules.length > 0 && (
-            <Button size="sm" onClick={() => setSelectedScheduleId(pendingSchedules[0].id)}>
-              Confirmar escalas
-            </Button>
-          )}
-        </section>
-
-        {nextWeekSchedules.length > 0 && (
-          <div className="text-xs text-muted-foreground">
-            Próximos 7 dias:{" "}
-            <span className="font-medium text-foreground">
-              {nextWeekStats.pending} pendente(s)
-            </span>{" "}
-            •{" "}
-            <span className="font-medium text-foreground">
-              {nextWeekStats.confirmed} confirmada(s)
-            </span>
-          </div>
-        )}
+        <DashboardStats
+          pendingCount={pendingSchedules.length}
+          confirmedCount={confirmedSchedules.length}
+          totalCount={mySchedules?.length || 0}
+          nextWeekStats={nextWeekStats}
+          hasNextWeekSchedules={nextWeekSchedules.length > 0}
+          onConfirmClick={() => pendingSchedules[0] && setSelectedScheduleId(pendingSchedules[0].id)}
+        />
 
         {nextSchedule && (
-          <section>
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-medium text-primary uppercase">
-                    Próximo compromisso
-                  </p>
-                  <p className="font-semibold truncate">
-                    {nextSchedule.title}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatScheduleDate(nextSchedule.date)}
-                  </p>
-                  {nextScheduleEventType?.name && (
-                    <p className="text-xs text-muted-foreground">
-                      {nextScheduleEventType.name}
-                    </p>
-                  )}
-                </div>
-                {getStatusBadge(nextSchedule)}
-              </CardContent>
-            </Card>
-          </section>
+          <NextScheduleCard
+            title={nextSchedule.title}
+            date={nextSchedule.date}
+            eventTypeName={nextScheduleEventType?.name}
+            statusBadge={getStatusBadge(nextSchedule)}
+            formatDate={formatScheduleDate}
+          />
         )}
 
-        {/* ALERTA */}
-        {pendingSchedules.length > 0 && (
-          <section className="rounded-2xl border border-warning/30 bg-warning/10 p-4 flex gap-3 shadow-sm">
-            <AlertCircle className="text-warning w-5 h-5 mt-0.5" />
-            <div>
-              <p className="font-medium">
-                Você tem {pendingSchedules.length} escala(s) aguardando confirmação
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Confirme ou recuse para ajudar na organização.
-              </p>
-            </div>
-          </section>
-        )}
+        <PendingAlert count={pendingSchedules.length} />
 
-        {/* ALERTAS */}
-        {pushSupported && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-start gap-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Bell className="w-4 h-4 text-primary" />
-                </div>
-                <div className="space-y-0.5">
-                  <p className="font-semibold leading-tight">Alertas</p>
-                  <p className="text-xs text-muted-foreground">
-                    Receba avisos quando novas escalas forem criadas.
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-xs"
-                onClick={() => setShowNotifications((prev) => !prev)}
-              >
-                {showNotifications ? "Ocultar" : "Mostrar"}
-              </Button>
-            </div>
+        <PushNotificationSection
+          pushSupported={push.pushSupported}
+          pushEnabled={push.pushEnabled}
+          pushLoading={push.pushLoading}
+          pushPermission={push.pushPermission}
+          onEnable={push.handleEnablePush}
+          onDisable={push.handleDisablePush}
+          onTest={push.handleTestPush}
+        />
 
-            {showNotifications && (
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="space-y-0.5 text-xs text-muted-foreground">
-                {!pushSupported && (
-                  <p>Seu navegador não suporta notificações push.</p>
-                )}
-                {pushPermission === "denied" && (
-                  <p className="text-destructive">Permissão bloqueada no navegador.</p>
-                )}
-                {pushEnabled && <p>Notificações ativadas neste dispositivo.</p>}
-              </div>
+        <MySchedulesList
+          schedules={filteredSchedules}
+          eventTypes={eventTypes}
+          filter={scheduleFilter}
+          onFilterChange={setScheduleFilter}
+          onConfirm={(id) => handleConfirm(id, "confirmed")}
+          onDecline={openDeclineDialog}
+          isLoading={loadingMySchedules}
+          getStatus={getMyStatus}
+          getStatusBadge={getStatusBadge}
+          formatDate={formatScheduleDate}
+        />
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleTestPush}
-                  disabled={!pushEnabled}
-                  size="sm"
-                  className="h-8"
-                >
-                  Testar alerta
-                </Button>
+        <UnavailabilitySection
+          entries={myUnavailability}
+          onAdd={handleAddUnavailability}
+          onDelete={handleDeleteUnavailability}
+          isAdding={createUnavailability.isPending}
+          isDeleting={deleteUnavailability.isPending}
+        />
 
-                {pushEnabled ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleDisablePush}
-                    disabled={pushLoading}
-                    size="sm"
-                    className="h-8"
-                  >
-                    {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Desativar alertas
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleEnablePush}
-                    disabled={!pushSupported || pushLoading || pushEnabled || pushPermission === "denied"}
-                    variant={pushEnabled ? "outline" : "default"}
-                    size="sm"
-                    className="h-8"
-                  >
-                    {pushLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    {pushEnabled ? "Alertas ativados" : "Ativar alertas"}
-                  </Button>
-                )}
-              </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* MINHAS ESCALAS */}
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <ClipboardCheck className="w-5 h-5 text-primary" />
-              Minhas Escalas
-            </h2>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={scheduleFilter === "all" ? "default" : "outline"}
-                onClick={() => setScheduleFilter("all")}
-              >
-                Todas
-              </Button>
-              <Button
-                size="sm"
-                variant={scheduleFilter === "pending" ? "default" : "outline"}
-                onClick={() => setScheduleFilter("pending")}
-              >
-                Pendentes
-              </Button>
-              <Button
-                size="sm"
-                variant={scheduleFilter === "confirmed" ? "default" : "outline"}
-                onClick={() => setScheduleFilter("confirmed")}
-              >
-                Confirmadas
-              </Button>
-            </div>
-          </div>
-
-          {loadingMySchedules ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-20 rounded-xl bg-muted animate-pulse"
-                />
-              ))}
-            </div>
-          ) : filteredSchedules && filteredSchedules.length > 0 ? (
-            <div className="space-y-3">
-              {filteredSchedules.map((schedule) => {
-                const eventType = eventTypes?.find(
-                  (type) => type.id === schedule.eventTypeId
-                );
-                return (
-                <div
-                  key={schedule.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-wrap justify-between gap-4 transition hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold">{schedule.title}</p>
-                      {eventType?.name && (
-                        <Badge
-                          variant="outline"
-                          style={{
-                            borderColor: eventType.color || undefined,
-                            color: eventType.color || undefined,
-                          }}
-                        >
-                          {eventType.name}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {formatScheduleDate(schedule.date)}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 items-center">
-                    {getMyStatus(schedule) === "pending" ? (
-                      <>
-                        <Button
-                          variant="success"
-                          onClick={() =>
-                            handleConfirm(schedule.id, "confirmed")
-                          }
-                        >
-                          <Check className="w-4 h-4 mr-2" />
-                          Confirmar
-                        </Button>
-                        <Button
-                          variant="destructive-outline"
-                          onClick={() => openDeclineDialog(schedule.id)}
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          Não irei
-                        </Button>
-                      </>
-                    ) : (
-                      getStatusBadge(schedule)
-                    )}
-                  </div>
-                </div>
-              )})}
-            </div>
-          ) : (
-            <div className="py-12 rounded-2xl border border-dashed border-slate-200 text-center bg-white">
-              <p className="font-medium">
-                Nenhuma escala atribuída ainda
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Quando houver um evento, ele aparecerá aqui.
-              </p>
-            </div>
-          )}
-        </section>
-
-        {/* MINHA INDISPONIBILIDADE */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
-              Minha indisponibilidade
-            </h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowUnavailabilitySection((prev) => !prev)}
-            >
-              {showUnavailabilitySection ? "Ocultar" : "Mostrar"}
-            </Button>
-          </div>
-
-          {showUnavailabilitySection && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4 shadow-sm overflow-hidden">
-            {myUnavailability.length > 0 ? (
-              <div className="space-y-2">
-                {myUnavailability.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {format(parseISO(String(entry.startDate)), "dd/MM/yyyy", {
-                          locale: ptBR,
-                        })}{" "}
-                        -{" "}
-                        {format(parseISO(String(entry.endDate)), "dd/MM/yyyy", {
-                          locale: ptBR,
-                        })}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {entry.reason?.trim() || "Sem motivo informado"}
-                      </p>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => setDeleteConfirmId(entry.id)}
-                      disabled={deleteUnavailability.isPending}
-                      aria-label="Remover indisponibilidade"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Nenhuma indisponibilidade registrada.
-              </p>
-            )}
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Início</Label>
-                <Input
-                  type="date"
-                  value={unavailabilityStart}
-                  onChange={(e) => handleStartDateChange(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Fim</Label>
-                <Input
-                  type="date"
-                  value={unavailabilityEnd}
-                  onChange={(e) => setUnavailabilityEnd(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1 md:col-span-2">
-                <Label className="text-xs font-medium">Motivo</Label>
-                <Input
-                  placeholder="Ex: Viagem, compromisso familiar"
-                  value={unavailabilityReason}
-                  onChange={(e) => setUnavailabilityReason(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                onClick={handleAddUnavailability}
-                disabled={createUnavailability.isPending}
-              >
-                {createUnavailability.isPending && (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                )}
-                Adicionar indisponibilidade
-              </Button>
-            </div>
-            </div>
-          )}
-        </section>
-
-        {/* SERVIÇOS */}
-        <section className="space-y-4">
-          <h2 className="text-xl font-bold tracking-tight">
-            Próximos Cultos e Eventos
-          </h2>
-
-          {loadingServices ? (
-            <div className="grid md:grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className="h-48 rounded-2xl bg-muted animate-pulse"
-                />
-              ))}
-            </div>
-          ) : futureServices.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-6">
-              {futureServices.map((service) => (
-                (() => {
-                  const eventType = eventTypes?.find(
-                    (type) => type.id === service.eventTypeId
-                  );
-                  return (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  volunteerId={volunteer?.id}
-                  showActions={false}
-                  eventTypeName={eventType?.name}
-                  eventTypeColor={eventType?.color}
-                />
-                  );
-                })()
-              ))}
-            </div>
-          ) : (
-            <div className="py-16 rounded-3xl border border-dashed border-slate-200 text-center bg-white">
-              <p className="font-medium">
-                Nenhum evento encontrado
-              </p>
-              <p className="text-sm text-muted-foreground">
-                As próximas escalas aparecerão aqui.
-              </p>
-            </div>
-          )}
-        </section>
+        <UpcomingServices
+          services={futureServices}
+          eventTypes={eventTypes}
+          volunteerId={volunteer?.id}
+          isLoading={loadingServices}
+        />
       </div>
 
-      {/* DIALOG */}
+      {/* Decline Dialog */}
       <Dialog open={declineDialogOpen} onOpenChange={setDeclineDialogOpen}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
@@ -1013,59 +419,6 @@ export default function Dashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* DELETE CONFIRMATION */}
-      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remover indisponibilidade?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Essa ação não pode ser desfeita. O período será removido da sua lista.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteConfirmId && handleDeleteUnavailability(deleteConfirmId)}
-              disabled={deleteUnavailability.isPending}
-            >
-              {deleteUnavailability.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : null}
-              Remover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppLayout>
-  );
-}
-
-/* ----------------- */
-
-function SummaryCard({
-  icon,
-  label,
-  value,
-  bg,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  bg: string;
-}) {
-  return (
-    <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className={`w-12 h-12 rounded-full ${bg} flex items-center justify-center`}>
-          {icon}
-        </div>
-        <div>
-          <p className="text-2xl font-bold">{value}</p>
-          <p className="text-sm text-muted-foreground">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

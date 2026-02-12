@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useVolunteerProfile, useEventTypes, useCreateEventType, useUpdateEventType } from "@/hooks/use-data";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, Plus, Loader2, Pencil } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
+import { LoadingCardGrid } from "@/components/LoadingCardGrid";
 
 const colorFamilies = [
   {
@@ -257,15 +259,11 @@ export default function EventTypes() {
       )}
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 rounded-xl bg-slate-100 animate-pulse" />
-          ))}
-        </div>
+        <LoadingCardGrid count={4} height="h-24" columns={3} />
       ) : filteredEventTypes && filteredEventTypes.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredEventTypes.map((eventType) => (
-            <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
+            <Card key={eventType.id} data-testid={`card-event-type-${eventType.id}`} className="rounded-2xl border-border bg-card shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
@@ -313,17 +311,11 @@ export default function EventTypes() {
           ))}
         </div>
       ) : (
-        <Card className="border-dashed border-slate-200 bg-white">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-3">
-              <Calendar className="w-7 h-7 text-slate-300" />
-            </div>
-            <p className="text-base font-medium text-foreground">Nenhum tipo de evento encontrado</p>
-            <p className="text-muted-foreground text-sm">
-              {searchTerm ? "Ajuste a busca para ver outros resultados." : "Adicione tipos de evento à sua organização."}
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Calendar}
+          title="Nenhum tipo de evento encontrado"
+          description={searchTerm ? "Ajuste a busca para ver outros resultados." : "Adicione tipos de evento à sua organização."}
+        />
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -440,3 +432,4 @@ export default function EventTypes() {
     </div>
   );
 }
+

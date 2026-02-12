@@ -5,7 +5,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/schedules": ["admin", "leader", "volunteer"],
 
   "/admin/volunteers": ["admin", "leader"],
-  "/admin/teams": ["leader"],
+  "/admin/teams": ["admin", "leader"],
 
   "/admin/ministries": ["admin"],
   "/admin/event-types": ["admin"],

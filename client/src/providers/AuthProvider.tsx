@@ -36,6 +36,7 @@ type AuthContextType = {
   volunteer: VolunteerProfile | null;
   loading: boolean;
   authReady: boolean;
+  syncingProfile: boolean;
   signOut: () => Promise<void>;
   refreshVolunteerProfile: () => Promise<void>;
 };
@@ -50,6 +51,7 @@ const AuthContext = createContext<AuthContextType>({
   volunteer: null,
   loading: true,
   authReady: false,
+  syncingProfile: false,
   signOut: async () => {},
   refreshVolunteerProfile: async () => {},
 });
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [syncingProfile, setSyncingProfile] = useState(false);
 
   const { toast } = useToast();
 
@@ -127,15 +130,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   --------------------------------------------------------- */
   const loadUserData = useCallback(
     async (currentSession: Session | null, isInitial = false) => {
-      setAuthReady(false);
+      const shouldBlockUi = isInitial || !initialLoadDone;
+      if (shouldBlockUi) {
+        setLoading(true);
+        setAuthReady(false);
+      } else {
+        setSyncingProfile(true);
+      }
 
       if (!currentSession?.user) {
         setSession(null);
         setUser(null);
         setVolunteer(null);
         if (isInitial) setInitialLoadDone(true);
-        setLoading(false);
-        setAuthReady(true);
+        if (shouldBlockUi) {
+          setLoading(false);
+          setAuthReady(true);
+        } else {
+          setSyncingProfile(false);
+        }
         return;
       }
 
@@ -152,10 +165,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setVolunteer(profile);
 
       if (isInitial) setInitialLoadDone(true);
-      setLoading(false);
-      setAuthReady(true);
+      if (shouldBlockUi) {
+        setLoading(false);
+        setAuthReady(true);
+      } else {
+        setSyncingProfile(false);
+      }
     },
-    [claimProfile, fetchVolunteerProfile]
+    [claimProfile, fetchVolunteerProfile, initialLoadDone]
   );
 
   /* ---------------------------------------------------------
@@ -219,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         volunteer,
         loading,
         authReady,
+        syncingProfile,
         signOut,
         refreshVolunteerProfile,
       }}

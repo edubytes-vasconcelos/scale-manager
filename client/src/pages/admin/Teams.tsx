@@ -196,7 +196,7 @@ export default function Teams() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 rounded-xl bg-slate-100 animate-pulse" />
+            <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
       ) : teams && teams.length > 0 ? (
@@ -205,7 +205,7 @@ export default function Teams() {
             const memberNames = getMemberNames(team.memberIds);
             const usageCount = getTeamUsageCount(team.id);
             return (
-              <Card key={team.id} data-testid={`card-team-${team.id}`} className="rounded-2xl border-slate-200 bg-white shadow-sm">
+              <Card key={team.id} data-testid={`card-team-${team.id}`} className="rounded-2xl border-border bg-card shadow-sm">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
@@ -267,10 +267,10 @@ export default function Teams() {
           })}
         </div>
       ) : (
-        <Card className="border-dashed border-slate-200 bg-white">
+        <Card className="border-dashed border-border bg-card">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="w-14 h-14 rounded-full bg-slate-50 flex items-center justify-center mb-3">
-              <UsersRound className="w-7 h-7 text-slate-300" />
+            <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-3">
+              <UsersRound className="w-7 h-7 text-muted-foreground/40" />
             </div>
             <p className="text-base font-medium text-foreground">Nenhuma equipe encontrada</p>
             <p className="text-muted-foreground text-sm">Crie equipes para organizar seus voluntários.</p>
@@ -376,3 +376,4 @@ export default function Teams() {
     </div>
   );
 }
+

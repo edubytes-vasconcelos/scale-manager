@@ -54,6 +54,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
+import { auditEvent } from "@/lib/audit";
 import type { Volunteer, MinistryAssignment } from "@shared/schema";
 
 /* =========================================================
@@ -89,15 +90,18 @@ const accessLevelLabels: Record<string, string> = {
 };
 
 const accessLevelClasses: Record<string, string> = {
-  admin: "bg-emerald-100 text-emerald-800",
-  leader: "bg-sky-100 text-sky-800",
-  volunteer: "bg-slate-100 text-slate-700",
+  admin:
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border dark:border-emerald-400/30",
+  leader:
+    "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300 dark:border dark:border-sky-400/30",
+  volunteer:
+    "bg-muted text-foreground dark:bg-muted/70 dark:border dark:border-border/60",
 };
 
 function getAccessLevelBadge(accessLevel?: string | null) {
   const label = accessLevelLabels[accessLevel || "volunteer"] || "Voluntário";
   const className =
-    accessLevelClasses[accessLevel || "volunteer"] || "bg-slate-100 text-slate-700";
+    accessLevelClasses[accessLevel || "volunteer"] || "bg-muted text-foreground";
   return { label, className };
 }
 
@@ -303,8 +307,9 @@ const safeAssignments = isAdmin
     setSaving(true);
     try {
       if (formMode === "add") {
+        const createdVolunteerId = crypto.randomUUID();
         const { error } = await supabase.from("volunteers").insert({
-          id: crypto.randomUUID(),
+          id: createdVolunteerId,
           name: formName,
           email: hasEmail ? formEmail.trim().toLowerCase() : null,
           whatsapp: formWhatsapp || null,
@@ -314,6 +319,20 @@ const safeAssignments = isAdmin
           can_manage_preaching_schedule: canManagePreachingValue,
                 });
         if (error) throw error;
+        await auditEvent({
+          organizationId,
+          actorVolunteerId: profile?.id,
+          action: "volunteer.create",
+          entityType: "volunteer",
+          entityId: createdVolunteerId,
+          metadata: {
+            name: formName,
+            hasEmail,
+            hasWhatsapp,
+            ministryAssignments: safeAssignments,
+            canManagePreachingSchedule: canManagePreachingValue,
+          },
+        });
       } else if (currentVolunteer) {
         const updateData: Record<string, any> = {
           name: formName,
@@ -330,6 +349,19 @@ const safeAssignments = isAdmin
           .update(updateData)
           .eq("id", currentVolunteer.id);
         if (error) throw error;
+        await auditEvent({
+          organizationId,
+          actorVolunteerId: profile?.id,
+          action: "volunteer.update",
+          entityType: "volunteer",
+          entityId: currentVolunteer.id,
+          metadata: {
+            name: formName,
+            hasWhatsapp,
+            ministryAssignments: safeAssignments,
+            canManagePreachingSchedule: canManagePreachingValue,
+          },
+        });
       }
 
       queryClient.invalidateQueries({
@@ -376,6 +408,18 @@ const safeAssignments = isAdmin
         endDate: unavailabilityEnd,
         reason: unavailabilityReason.trim() || null,
       });
+      await auditEvent({
+        organizationId,
+        actorVolunteerId: profile?.id,
+        action: "volunteer.unavailability.create",
+        entityType: "volunteer",
+        entityId: currentVolunteer.id,
+        metadata: {
+          startDate: unavailabilityStart,
+          endDate: unavailabilityEnd,
+          reason: unavailabilityReason.trim() || null,
+        },
+      });
 
       setUnavailabilityStart("");
       setUnavailabilityEnd("");
@@ -397,6 +441,13 @@ const safeAssignments = isAdmin
     if (!organizationId) return;
     try {
       await deleteUnavailability.mutateAsync({ id, organizationId });
+      await auditEvent({
+        organizationId,
+        actorVolunteerId: profile?.id,
+        action: "volunteer.unavailability.delete",
+        entityType: "volunteer_unavailability",
+        entityId: id,
+      });
       toast({
         title: "Indisponibilidade removida",
       });
@@ -438,6 +489,16 @@ const safeAssignments = isAdmin
       .from("volunteers")
       .delete()
       .eq("id", volunteerToDelete.id);
+    await auditEvent({
+      organizationId,
+      actorVolunteerId: profile?.id,
+      action: "volunteer.delete",
+      entityType: "volunteer",
+      entityId: volunteerToDelete.id,
+      metadata: {
+        name: volunteerToDelete.name,
+      },
+    });
 
     queryClient.invalidateQueries({
       queryKey: ["volunteers", organizationId],
@@ -536,7 +597,7 @@ const safeAssignments = isAdmin
       </div>
 
       {!isLoading && (!filteredVolunteers || filteredVolunteers.length === 0) ? (
-        <Card className="border-dashed border-slate-200 bg-white">
+        <Card className="border-dashed border-border bg-card">
           <CardContent className="py-8 text-center space-y-3">
             <p className="font-medium">
               {searchTerm || filterAccessLevel !== "all" || filterMinistry !== "all"
@@ -578,7 +639,7 @@ const safeAssignments = isAdmin
           return (
             <Card
               key={v.id}
-              className="group transition hover:shadow-md focus-within:shadow-md"
+              className="group rounded-2xl border border-border/80 bg-card shadow-sm overflow-hidden transition hover:shadow-md focus-within:shadow-md"
             >
               <CardHeader className="flex flex-row gap-3 pb-3">
                 <div className="relative shrink-0">
@@ -602,7 +663,10 @@ const safeAssignments = isAdmin
                   <CardTitle className="text-base truncate" title={v.name}>
                     {v.name}
                   </CardTitle>
-                  <p className="text-sm text-muted-foreground truncate" title={v.email || undefined}>
+                  <p
+                    className="text-sm text-muted-foreground dark:text-foreground/75 truncate"
+                    title={v.email || undefined}
+                  >
                     {v.email}
                   </p>
                 </div>
@@ -655,8 +719,8 @@ const safeAssignments = isAdmin
                   <Badge
                     className={
                       isActive
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
+                        ? "bg-green-100 text-green-800 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border dark:border-emerald-400/30"
+                        : "bg-yellow-100 text-yellow-800 dark:bg-amber-500/15 dark:text-amber-300 dark:border dark:border-amber-400/30"
                     }
                   >
                     {isActive ? (
@@ -676,7 +740,7 @@ const safeAssignments = isAdmin
                 {v.canManagePreachingSchedule && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge className="bg-indigo-100 text-indigo-800">
+                      <Badge className="bg-indigo-100 text-indigo-800 dark:bg-violet-500/15 dark:text-violet-300 dark:border dark:border-violet-400/30">
                         Gerencia pregação
                       </Badge>
                     </TooltipTrigger>
@@ -1001,4 +1065,5 @@ const safeAssignments = isAdmin
     </div>
   );
 }
+
 

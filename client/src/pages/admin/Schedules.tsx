@@ -84,6 +84,7 @@ import {
   normalizeAssignments,
 } from "@/lib/assignments";
 import { getReadableEventColor } from "@/lib/color";
+import { auditEvent } from "@/lib/audit";
 import { mapService } from "@/lib/mappers";
 
 /* =====================================================
@@ -101,6 +102,14 @@ type VolunteerProfileExtended = {
   organizationId: string;
   ministryAssignments?: MinistryAssignment[];
   canManagePreachingSchedule?: boolean;
+};
+
+type AutoScheduleSuggestion = {
+  ministryId: string;
+  ministryName: string;
+  requestedSlots: number;
+  suggestedVolunteerIds: string[];
+  missingSlots: number;
 };
 
 /* =====================================================
@@ -182,6 +191,10 @@ export default function Schedules() {
   const [dayPickOpen, setDayPickOpen] = useState(false);
   const [dayPickServices, setDayPickServices] = useState<Service[]>([]);
   const [declineReason, setDeclineReason] = useState("");
+  const [autoMinistrySlots, setAutoMinistrySlots] = useState<Record<string, number>>({});
+  const [autoSuggestions, setAutoSuggestions] = useState<AutoScheduleSuggestion[]>([]);
+  const [isGeneratingAuto, setIsGeneratingAuto] = useState(false);
+  const [isApplyingAuto, setIsApplyingAuto] = useState(false);
 
   const isAdmin = profile?.accessLevel === "admin";
   const isLeader = profile?.accessLevel === "leader";
@@ -200,6 +213,25 @@ export default function Schedules() {
       .filter((m) => m.isLeader)
       .map((m) => m.ministryId);
   }, [profile]);
+
+  const manageableMinistriesForAuto = useMemo(() => {
+    if (!ministries || !volunteers) return [];
+
+    const baseList = isAdmin
+      ? ministries
+      : isLeader
+      ? ministries.filter((m) => leaderMinistryIds.includes(m.id))
+      : [];
+
+    // Mostra apenas ministerios com ao menos 1 voluntario vinculado.
+    return baseList.filter((ministry) =>
+      volunteers.some((volunteer) =>
+        (volunteer.ministryAssignments || []).some(
+          (assignment) => assignment.ministryId === ministry.id
+        )
+      )
+    );
+  }, [ministries, volunteers, isAdmin, isLeader, leaderMinistryIds]);
 
   const canDeleteService = (service: Service): boolean => {
     if (isAdmin) return true;
@@ -279,7 +311,7 @@ export default function Schedules() {
     const { total, confirmed } = getServiceStats(service);
 
     if (total === 0)
-      return <Badge className="bg-slate-100 text-slate-700">Sem voluntários</Badge>;
+      return <Badge className="bg-muted text-foreground">Sem voluntários</Badge>;
 
     if (confirmed === total)
       return <Badge className="bg-green-100 text-green-800">Escala completa</Badge>;
@@ -291,7 +323,7 @@ export default function Schedules() {
         </Badge>
       );
 
-    return <Badge className="bg-slate-100 text-slate-700">Pendente</Badge>;
+    return <Badge className="bg-muted text-foreground">Pendente</Badge>;
   };
 
   const getStatusBadge = (status?: string) => {
@@ -299,7 +331,7 @@ export default function Schedules() {
       return <Badge className="bg-green-100 text-green-800">Confirmado</Badge>;
     if (status === "declined")
       return <Badge className="bg-red-100 text-red-800">Recusou</Badge>;
-    return <Badge className="bg-slate-100 text-slate-700">Pendente</Badge>;
+    return <Badge className="bg-muted text-foreground">Pendente</Badge>;
   };
 
   const getStatusLabel = (status?: string) => {
@@ -339,6 +371,8 @@ export default function Schedules() {
     setEditEventTypeId(eventType?.id || "");
     setEditEventTitle(shouldClearTitle ? "" : service.title || "");
     setShouldFocusAssign(!!options?.focusPreacher);
+    setAutoMinistrySlots({});
+    setAutoSuggestions([]);
     setAssignDialogOpen(true);
 
     if (services?.length) {
@@ -747,6 +781,20 @@ export default function Schedules() {
       });
 
       await notifyNewSchedule(dates.length);
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.create",
+        entityType: "service",
+        entityId: createdService?.id ?? null,
+        metadata: {
+          count: dates.length,
+          dates,
+          eventTypeId: newEventTypeId || null,
+          title,
+          recurrenceType,
+        },
+      });
 
       toast({
         title: "Escala criada!",
@@ -806,6 +854,19 @@ export default function Schedules() {
       queryClient.invalidateQueries({
         queryKey: ["services", profile?.organizationId],
       });
+      if (profile?.organizationId) {
+        await auditEvent({
+          organizationId: profile.organizationId,
+          actorVolunteerId: profile.id,
+          action: "schedule.delete",
+          entityType: "service",
+          entityId: serviceId,
+          metadata: {
+            date: service.date,
+            title: service.title || null,
+          },
+        });
+      }
       toast({ title: "Escala excluída" });
     } else {
       toast({
@@ -831,6 +892,266 @@ export default function Schedules() {
     return normalizeAssignments(
       (data.assignments as ServiceAssignmentsPayload | null) ?? null
     );
+  };
+
+  const handleAutoSlotChange = (ministryId: string, value: string) => {
+    const parsed = Number.parseInt(value, 10);
+    const nextValue = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 20)) : 0;
+    setAutoMinistrySlots((prev) => ({ ...prev, [ministryId]: nextValue }));
+  };
+
+  const getVolunteerHistoryStats = (volunteerId: string, untilDate: string) => {
+    if (!services?.length) {
+      return {
+        totalAssignments: 0,
+        confirmedAssignments: 0,
+        declinedAssignments: 0,
+        recentAssignments8w: 0,
+        daysSinceLastAssignment: 999,
+      };
+    }
+
+    const until = parseISO(untilDate);
+    const recentStart = addWeeks(until, -8);
+    let totalAssignments = 0;
+    let confirmedAssignments = 0;
+    let declinedAssignments = 0;
+    let recentAssignments8w = 0;
+    let lastAssignmentDate: Date | null = null;
+
+    for (const service of services) {
+      const serviceDate = parseISO(service.date);
+      if (!isBefore(serviceDate, until)) continue;
+      const assignment = getNormalizedAssignments(service).volunteers.find(
+        (a) => a.volunteerId === volunteerId
+      );
+      if (!assignment) continue;
+
+      totalAssignments += 1;
+      if (assignment.status === "confirmed") confirmedAssignments += 1;
+      if (assignment.status === "declined") declinedAssignments += 1;
+      if (!isBefore(serviceDate, recentStart)) recentAssignments8w += 1;
+
+      if (!lastAssignmentDate || isBefore(lastAssignmentDate, serviceDate)) {
+        lastAssignmentDate = serviceDate;
+      }
+    }
+
+    const daysSinceLastAssignment = lastAssignmentDate
+      ? Math.max(
+          0,
+          Math.floor((until.getTime() - lastAssignmentDate.getTime()) / (1000 * 60 * 60 * 24))
+        )
+      : 999;
+
+    return {
+      totalAssignments,
+      confirmedAssignments,
+      declinedAssignments,
+      recentAssignments8w,
+      daysSinceLastAssignment,
+    };
+  };
+
+  const generateAutoSuggestions = async () => {
+    if (!selectedService || !volunteers?.length || !services?.length) return;
+    if (!canManageVolunteers) return;
+
+    const slotsByMinistry = Object.entries(autoMinistrySlots)
+      .filter(([_, slots]) => (slots || 0) > 0)
+      .map(([ministryId, slots]) => ({ ministryId, slots }));
+
+    if (slotsByMinistry.length === 0) {
+      toast({
+        title: "Informe as vagas por ministério",
+        description: "Defina ao menos 1 vaga em um ministério para gerar sugestões.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingAuto(true);
+    try {
+      const currentAssignments = getNormalizedAssignments(selectedService).volunteers;
+      const alreadyAssignedIds = new Set(
+        currentAssignments.map((a) => a.volunteerId).filter(Boolean) as string[]
+      );
+      const usedVolunteerIds = new Set<string>();
+
+      const nextSuggestions: AutoScheduleSuggestion[] = [];
+
+      for (const { ministryId, slots } of slotsByMinistry) {
+        if (!isAdmin && !leaderMinistryIds.includes(ministryId)) continue;
+
+        const ministry = ministries?.find((m) => m.id === ministryId);
+        const ministryName = ministry?.name || "Ministério";
+
+        const eligible = volunteers
+          .filter((volunteer) => {
+            const assignments = (volunteer as any).ministryAssignments as
+              | MinistryAssignment[]
+              | undefined;
+            const belongsToMinistry = assignments?.some(
+              (assignment) => assignment.ministryId === ministryId
+            );
+            if (!belongsToMinistry) return false;
+            if (alreadyAssignedIds.has(volunteer.id)) return false;
+            if (usedVolunteerIds.has(volunteer.id)) return false;
+            if (getVolunteerUnavailability(volunteer.id, selectedService.date)) return false;
+
+            const hasSameDayConflict = services.some((service) => {
+              if (service.id === selectedService.id) return false;
+              if (service.date !== selectedService.date) return false;
+              return getNormalizedAssignments(service).volunteers.some(
+                (assignment) => assignment.volunteerId === volunteer.id
+              );
+            });
+
+            return !hasSameDayConflict;
+          })
+          .map((volunteer) => {
+            const stats = getVolunteerHistoryStats(volunteer.id, selectedService.date);
+            const reliabilityBase =
+              stats.totalAssignments > 0
+                ? (stats.confirmedAssignments / stats.totalAssignments) * 25
+                : 12;
+            const balanceScore = Math.max(0, 40 - stats.recentAssignments8w * 6);
+            const recencyScore = Math.min(20, (stats.daysSinceLastAssignment / 60) * 20);
+            const declinePenalty = Math.min(20, stats.declinedAssignments * 2);
+            const totalScore = balanceScore + reliabilityBase + recencyScore - declinePenalty;
+
+            return { volunteer, totalScore };
+          })
+          .sort((a, b) => b.totalScore - a.totalScore);
+
+        const selected = eligible.slice(0, slots).map((entry) => entry.volunteer.id);
+        selected.forEach((id) => usedVolunteerIds.add(id));
+
+        nextSuggestions.push({
+          ministryId,
+          ministryName,
+          requestedSlots: slots,
+          suggestedVolunteerIds: selected,
+          missingSlots: Math.max(0, slots - selected.length),
+        });
+      }
+
+      setAutoSuggestions(nextSuggestions);
+
+      const totalRequested = nextSuggestions.reduce(
+        (sum, item) => sum + item.requestedSlots,
+        0
+      );
+      const totalSuggested = nextSuggestions.reduce(
+        (sum, item) => sum + item.suggestedVolunteerIds.length,
+        0
+      );
+
+      toast({
+        title: "Sugestões geradas",
+        description: `${totalSuggested}/${totalRequested} vagas preenchidas automaticamente.`,
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao gerar sugestões",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingAuto(false);
+    }
+  };
+
+  const applyAutoSuggestions = async () => {
+    if (!selectedService || !profile) return;
+    if (!canManageVolunteers) return;
+
+    const allSuggestedIds = Array.from(
+      new Set(autoSuggestions.flatMap((item) => item.suggestedVolunteerIds))
+    );
+
+    if (allSuggestedIds.length === 0) {
+      toast({
+        title: "Sem sugestões para aplicar",
+        description: "Gere sugestões antes de aplicar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsApplyingAuto(true);
+    try {
+      const current = await fetchAssignments(selectedService.id);
+      const existingIds = new Set(
+        current.volunteers.map((assignment) => assignment.volunteerId).filter(Boolean) as string[]
+      );
+      const toAdd = allSuggestedIds.filter((volunteerId) => !existingIds.has(volunteerId));
+
+      if (toAdd.length === 0) {
+        toast({
+          title: "Nada para aplicar",
+          description: "Todos os sugeridos já estão escalados neste evento.",
+        });
+        return;
+      }
+
+      const updated = {
+        ...current,
+        volunteers: [
+          ...current.volunteers,
+          ...toAdd.map((volunteerId) => ({
+            volunteerId,
+            status: "pending" as const,
+            note: "auto_schedule",
+          })),
+        ],
+      };
+
+      const { error } = await supabase
+        .from("services")
+        .update({ assignments: buildAssignmentsPayload(updated) })
+        .eq("id_uuid", selectedService.id);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({
+        queryKey: ["services", profile.organizationId],
+      });
+      setSelectedService({
+        ...selectedService,
+        assignments: buildAssignmentsPayload(updated),
+      });
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.autoschedule.apply",
+        entityType: "service",
+        entityId: selectedService.id,
+        metadata: {
+          addedVolunteerIds: toAdd,
+          suggestions: autoSuggestions.map((item) => ({
+            ministryId: item.ministryId,
+            requestedSlots: item.requestedSlots,
+            suggestedVolunteerIds: item.suggestedVolunteerIds,
+            missingSlots: item.missingSlots,
+          })),
+        },
+      });
+
+      toast({
+        title: "Sugestões aplicadas",
+        description: `${toAdd.length} voluntário(s) adicionados à escala.`,
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "Erro ao aplicar sugestões",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplyingAuto(false);
+    }
   };
 
   const handleAddVolunteer = async (force = false) => {
@@ -921,6 +1242,17 @@ export default function Schedules() {
         ...selectedService,
         assignments: buildAssignmentsPayload(updated),
       });
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.assignment.add",
+        entityType: "service",
+        entityId: selectedService.id,
+        metadata: {
+          volunteerId: selectedVolunteerId,
+          source: force ? "force_conflict_override" : "manual",
+        },
+      });
       setSelectedVolunteerId("");
     } catch (error: any) {
       console.error(error);
@@ -959,6 +1291,16 @@ export default function Schedules() {
         ...selectedService,
         assignments: buildAssignmentsPayload(updated),
       });
+      if (profile) {
+        await auditEvent({
+          organizationId: profile.organizationId,
+          actorVolunteerId: profile.id,
+          action: "schedule.assignment.remove",
+          entityType: "service",
+          entityId: selectedService.id,
+          metadata: { volunteerId },
+        });
+      }
     } catch (error: any) {
       console.error(error);
       toast({
@@ -976,7 +1318,7 @@ export default function Schedules() {
   ======================= */
 
   const handleUpdateServiceEvent = async () => {
-    if (!selectedService || !canManageSchedules) return;
+    if (!selectedService || !canManageSchedules || !profile) return;
     setIsSavingEvent(true);
 
     try {
@@ -1000,6 +1342,17 @@ export default function Schedules() {
         title: title ? title : null,
         eventTypeId: editEventTypeId || null,
       } as Service);
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.update",
+        entityType: "service",
+        entityId: selectedService.id,
+        metadata: {
+          title: title ? title : null,
+          eventTypeId: editEventTypeId || null,
+        },
+      });
 
       toast({
         title: "Evento atualizado",
@@ -1050,6 +1403,17 @@ export default function Schedules() {
         ...selectedService,
         assignments: buildAssignmentsPayload(updated),
       });
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.preacher.add",
+        entityType: "service",
+        entityId: selectedService.id,
+        metadata: {
+          preacherId: preacher.id,
+          preacherName: preacher.name,
+        },
+      });
       resetPreacherForm();
     } catch (error: any) {
       console.error(error);
@@ -1086,6 +1450,14 @@ export default function Schedules() {
       setSelectedService({
         ...selectedService,
         assignments: buildAssignmentsPayload(updated),
+      });
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.preacher.remove",
+        entityType: "service",
+        entityId: selectedService.id,
+        metadata: { preacherId },
       });
     } catch (error: any) {
       console.error(error);
@@ -1189,6 +1561,17 @@ export default function Schedules() {
         setSelectedService({
           ...selectedService,
           assignments: buildAssignmentsPayload(next),
+        });
+        await auditEvent({
+          organizationId: profile.organizationId,
+          actorVolunteerId: profile.id,
+          action: "schedule.preacher.update",
+          entityType: "service",
+          entityId: selectedService.id,
+          metadata: {
+            preacherId: updated.id,
+            preacherName: updated.name,
+          },
         });
       }
 
@@ -1581,7 +1964,7 @@ export default function Schedules() {
       </div>
 
       {viewMode === "list" && (
-        <Card className="border-slate-200">
+        <Card className="border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Filtros</CardTitle>
           </CardHeader>
@@ -1760,7 +2143,7 @@ export default function Schedules() {
               return (
                 <Card
                   key={service.id}
-                  className="rounded-2xl border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
+                  className="rounded-2xl border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md overflow-hidden"
                 >
                 <div className="h-1 bg-gradient-to-r from-primary/70 via-primary/30 to-transparent" />
                 <CardHeader className="pb-3">
@@ -1773,12 +2156,12 @@ export default function Schedules() {
                         {serviceTitle}
                       </CardTitle>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium">
                           {format(parseISO(service.date), "dd/MM/yyyy")}
                         </span>
                         {showEventType && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                             <span
                               className="h-2 w-2 rounded-full"
                               style={{ backgroundColor: eventType?.color || "#94a3b8" }}
@@ -1891,8 +2274,8 @@ export default function Schedules() {
       )}
 
       {viewMode === "calendar" && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between gap-2 p-4 border-b border-slate-200/80">
+        <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between gap-2 p-4 border-b border-border">
             <div className="flex items-center gap-2">
               <Button
                 size="icon"
@@ -1912,8 +2295,8 @@ export default function Schedules() {
             </div>
 
             <div className="text-center">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Calendario</p>
-              <h3 className="text-lg font-semibold capitalize text-slate-900 tracking-tight">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Calendario</p>
+              <h3 className="text-lg font-semibold capitalize text-foreground tracking-tight">
                 {format(calendarMonth, "MMMM yyyy", { locale: ptBR })}
               </h3>
             </div>
@@ -1927,7 +2310,7 @@ export default function Schedules() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-7 bg-slate-50/80 border-b border-slate-200/80">
+          <div className="grid grid-cols-7 bg-muted/40 border-b border-border/60">
             {Array.from({ length: 7 }).map((_, idx) => {
               const baseDate = addDays(startOfWeek(new Date(), { weekStartsOn: 0 }), idx);
               const labelShort = format(baseDate, "EEEEE", { locale: ptBR });
@@ -1935,7 +2318,7 @@ export default function Schedules() {
               return (
                 <div
                   key={`weekday-${idx}`}
-                  className="px-1 sm:px-2 py-2 text-[10px] sm:text-[11px] uppercase tracking-wide text-slate-500 text-center"
+                  className="px-1 sm:px-2 py-2 text-[10px] sm:text-[11px] uppercase tracking-wide text-muted-foreground/80 text-center"
                 >
                   <span className="sm:hidden">{labelShort}</span>
                   <span className="hidden sm:inline">{labelLong}</span>
@@ -1955,15 +2338,15 @@ export default function Schedules() {
               return (
                 <div
                   key={idx}
-                  className={`border border-slate-200/80 p-1 sm:p-2 min-h-[76px] sm:min-h-[120px] transition-colors ${
-                    !isSameMonth(day, calendarMonth) ? "bg-slate-50/80 text-slate-400" : "bg-white"
-                  } ${hasSchedules ? "bg-emerald-50/30" : ""} ${
-                    isSameDay(day, new Date()) ? "ring-1 ring-primary/40 bg-primary/5" : ""
-                  } ${canManageSchedules ? "cursor-pointer hover:bg-slate-50/90" : ""}`}
+                  className={`border border-border/60 p-1 sm:p-2 min-h-[76px] sm:min-h-[120px] transition-colors ${
+                    !isSameMonth(day, calendarMonth) ? "bg-muted/25 text-muted-foreground/45" : "bg-card"
+                  } ${hasSchedules ? "shadow-inner shadow-primary/5" : ""} ${
+                    isSameDay(day, new Date()) ? "ring-1 ring-primary/45 bg-primary/10" : ""
+                  } ${canManageSchedules ? "cursor-pointer hover:bg-accent/40" : ""}`}
                   onClick={() => handleDayClick(day)}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-[11px] sm:text-xs font-semibold text-slate-700">
+                    <div className="text-[11px] sm:text-xs font-semibold text-foreground">
                       {format(day, "d")}
                     </div>
                     {hasSchedules && (
@@ -1989,14 +2372,14 @@ export default function Schedules() {
                     const eventStyle = eventType?.color
                       ? {
                           borderLeftColor: eventType.color,
-                          backgroundColor: `${eventType.color}14`,
+                          backgroundColor: `${eventType.color}10`,
                         }
                       : undefined;
 
                     return (
                       <div
                         key={s.id}
-                        className="group relative text-[10px] sm:text-xs rounded-md px-2 py-1 mt-1 truncate border border-slate-200/70 bg-white/90 shadow-[0_1px_4px_rgba(15,23,42,0.04)] border-l-2"
+                        className="group relative text-[10px] sm:text-xs rounded-md px-2 py-1 mt-1 truncate border border-border/70 bg-background/65 shadow-[0_1px_4px_rgba(15,23,42,0.05)] border-l-2"
                         style={eventStyle}
                         title={getServiceTitle(s)}
                       >
@@ -2021,7 +2404,7 @@ export default function Schedules() {
                           {serviceTitle}
                         </span>
                         {showEventType && (
-                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] text-slate-600">
+                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] sm:text-[10px] text-muted-foreground">
                             <span
                               className="h-1.5 w-1.5 rounded-full"
                               style={{ backgroundColor: eventType?.color || "#94a3b8" }}
@@ -2052,7 +2435,7 @@ export default function Schedules() {
                       return (
                         <div
                           key={s.id}
-                          className="rounded-md px-1.5 py-1 text-[10px] font-medium truncate border border-slate-200/70 bg-white/90"
+                          className="rounded-md px-1.5 py-1 text-[10px] font-medium truncate border border-border/70 bg-background/65"
                           style={readableEventColor ? { color: readableEventColor } : undefined}
                         >
                           {getServiceTitle(s)}
@@ -2106,7 +2489,7 @@ export default function Schedules() {
 
           <div className="space-y-3 max-h-[calc(90dvh-92px)] overflow-y-auto px-4 py-3">
             {isCreateMode ? (
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="space-y-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Evento
                 </div>
@@ -2206,7 +2589,7 @@ export default function Schedules() {
                   Evento
                 </div>
                 {canManageSchedules && (
-                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
                     <div className="space-y-1">
                       <Label>Tipo de evento</Label>
                       <Select value={editEventTypeId} onValueChange={setEditEventTypeId}>
@@ -2259,7 +2642,7 @@ export default function Schedules() {
                       ? ["people"]
                       : []
                   }
-                  className="rounded-2xl border border-slate-200 bg-white px-3 shadow-sm"
+                  className="rounded-2xl border border-border bg-card px-3 shadow-sm"
                 >
                   <AccordionItem value="people" className="border-none">
                     <AccordionTrigger className="py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:no-underline">
@@ -2377,7 +2760,99 @@ export default function Schedules() {
                 )}
 
                 {canManageVolunteers && (
-                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="space-y-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Autoescala (beta)
+                      </Label>
+                      <div className="text-xs text-muted-foreground">
+                        Evento atual
+                      </div>
+                    </div>
+
+                    {manageableMinistriesForAuto.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhum ministério disponível para geração automática.
+                      </p>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {manageableMinistriesForAuto.map((ministry) => (
+                          <div
+                            key={`auto-slot-${ministry.id}`}
+                            className="rounded-md border border-border p-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium truncate">
+                                {ministry.name}
+                              </span>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={20}
+                                value={autoMinistrySlots[ministry.id] ?? 0}
+                                onChange={(e) =>
+                                  handleAutoSlotChange(ministry.id, e.target.value)
+                                }
+                                className="h-8 w-20 text-center"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={generateAutoSuggestions}
+                        disabled={isGeneratingAuto || manageableMinistriesForAuto.length === 0}
+                      >
+                        {isGeneratingAuto ? "Gerando..." : "Sugerir escala"}
+                      </Button>
+                      <Button
+                        onClick={applyAutoSuggestions}
+                        disabled={isApplyingAuto || autoSuggestions.length === 0}
+                      >
+                        {isApplyingAuto ? "Aplicando..." : "Aplicar sugestões"}
+                      </Button>
+                    </div>
+
+                    {autoSuggestions.length > 0 && (
+                      <div className="space-y-2 rounded-md border border-border p-2">
+                        {autoSuggestions.map((suggestion) => (
+                          <div
+                            key={`auto-suggestion-${suggestion.ministryId}`}
+                            className="rounded-md border border-border p-2"
+                          >
+                            <p className="text-sm font-medium">
+                              {suggestion.ministryName} ({suggestion.suggestedVolunteerIds.length}/
+                              {suggestion.requestedSlots})
+                            </p>
+                            {suggestion.suggestedVolunteerIds.length > 0 ? (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {suggestion.suggestedVolunteerIds
+                                  .map((volunteerId) => getVolunteerName(volunteerId))
+                                  .join(", ")}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Nenhuma sugestão disponível.
+                              </p>
+                            )}
+                            {suggestion.missingSlots > 0 && (
+                              <p className="text-xs text-amber-600 mt-1">
+                                {suggestion.missingSlots} vaga(s) sem preenchimento automático.
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {canManageVolunteers && (
+                  <div className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
                     <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Adicionar voluntario
                     </Label>
@@ -2431,7 +2906,7 @@ export default function Schedules() {
                 )}
 
                 {canManagePreaching && (
-                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="space-y-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
                     <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Adicionar pregador
                     </Label>
@@ -2629,7 +3104,7 @@ export default function Schedules() {
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>{format(parseISO(service.date), "dd/MM/yyyy")}</span>
                     {showEventType && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                         <span
                           className="h-2 w-2 rounded-full"
                           style={{ backgroundColor: eventType?.color || "#94a3b8" }}
@@ -2687,3 +3162,4 @@ export default function Schedules() {
     </div>
   );
 }
+

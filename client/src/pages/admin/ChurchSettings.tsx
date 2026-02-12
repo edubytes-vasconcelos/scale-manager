@@ -17,7 +17,7 @@ export default function ChurchSettings() {
 
   if (!profile) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
         Carregando configurações...
       </div>
     );
@@ -128,7 +128,7 @@ Link: ${joinUrl}` : "";
         </p>
       </div>
 
-      <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <Card className="rounded-2xl border border-border bg-card shadow-sm">
         <CardContent className="p-6 space-y-4">
           <div>
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -157,7 +157,7 @@ Link: ${joinUrl}` : "";
 
           <div className="flex flex-wrap gap-3 items-center">
             {inviteCode && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-xl border border-border bg-muted p-3">
                 <p className="text-xs text-muted-foreground mb-2">QR Code</p>
                 <QRCodeCanvas value={joinUrl || inviteCode} size={120} bgColor="#ffffff" fgColor="#0f172a" />
               </div>
@@ -175,3 +175,4 @@ Link: ${joinUrl}` : "";
     </div>
   );
 }
+

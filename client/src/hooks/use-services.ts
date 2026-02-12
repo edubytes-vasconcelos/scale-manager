@@ -20,6 +20,7 @@ export function useServices(organizationId: string | null | undefined) {
       return (data || []).map(mapService);
     },
     enabled: !!organizationId,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -39,6 +40,7 @@ export function useMySchedules(volunteerId: string | null | undefined, organizat
       return ((data || []) as any[]).map(mapService);
     },
     enabled: !!volunteerId && !!organizationId,
+    refetchOnWindowFocus: true,
   });
 }
 
