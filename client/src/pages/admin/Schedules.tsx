@@ -1613,10 +1613,29 @@ export default function Schedules() {
       queryClient.invalidateQueries({
         queryKey: ["services", profile.organizationId],
       });
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.rsvp.confirm",
+        entityType: "service",
+        entityId: service.id,
+      });
 
       toast({ title: "Confirmado!", description: "Sua presença foi confirmada." });
     } catch (error: any) {
       console.error(error);
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "system.error",
+        entityType: "system",
+        metadata: {
+          area: "schedule_rsvp",
+          operation: "confirm",
+          serviceId: service.id,
+          message: error?.message || "unknown_error",
+        },
+      });
       toast({
         title: "Erro ao confirmar",
         description: error?.message || "Tente novamente.",
@@ -1649,10 +1668,32 @@ export default function Schedules() {
         queryKey: ["services", profile.organizationId],
       });
       setDeclineDialogOpen(false);
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "schedule.rsvp.decline",
+        entityType: "service",
+        entityId: selectedService.id,
+        metadata: {
+          reason: declineReason || null,
+        },
+      });
 
       toast({ title: "Recusa registrada", description: "Obrigado por avisar." });
     } catch (error: any) {
       console.error(error);
+      await auditEvent({
+        organizationId: profile.organizationId,
+        actorVolunteerId: profile.id,
+        action: "system.error",
+        entityType: "system",
+        metadata: {
+          area: "schedule_rsvp",
+          operation: "decline",
+          serviceId: selectedService.id,
+          message: error?.message || "unknown_error",
+        },
+      });
       toast({
         title: "Erro ao recusar",
         description: error?.message || "Tente novamente.",

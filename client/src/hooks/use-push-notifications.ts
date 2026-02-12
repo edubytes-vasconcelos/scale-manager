@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { urlBase64ToUint8Array } from "@/lib/push";
 import { useToast } from "@/hooks/use-toast";
+import { auditEvent } from "@/lib/audit";
 
 export function usePushNotifications() {
   const { toast } = useToast();
@@ -10,6 +11,27 @@ export function usePushNotifications() {
   const [pushLoading, setPushLoading] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default");
   const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+
+  const getAuditContext = useCallback(async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+    if (!user) return null;
+
+    const { data: volunteer } = await supabase
+      .from("volunteers")
+      .select("id, organization_id")
+      .eq("auth_user_id", user.id)
+      .order("organization_id", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!volunteer?.organization_id) return null;
+
+    return {
+      organizationId: volunteer.organization_id as string,
+      volunteerId: volunteer.id as string | null,
+    };
+  }, []);
 
   const handleEnablePush = useCallback(async () => {
     if (!("serviceWorker" in navigator && "PushManager" in window && "Notification" in window)) return;
@@ -64,11 +86,39 @@ export function usePushNotifications() {
       }
 
       setPushEnabled(true);
+      const auditCtx = await getAuditContext();
+      if (auditCtx) {
+        await auditEvent({
+          organizationId: auditCtx.organizationId,
+          actorVolunteerId: auditCtx.volunteerId,
+          action: "notification.push.enabled",
+          entityType: "notification_settings",
+          entityId: auditCtx.volunteerId || null,
+          metadata: {
+            permission,
+            hasSubscription: true,
+          },
+        });
+      }
       toast({
         title: "Notificações ativadas",
         description: "Você receberá alertas de novas escalas.",
       });
     } catch (error: any) {
+      const auditCtx = await getAuditContext();
+      if (auditCtx) {
+        await auditEvent({
+          organizationId: auditCtx.organizationId,
+          actorVolunteerId: auditCtx.volunteerId,
+          action: "system.error",
+          entityType: "system",
+          metadata: {
+            area: "push",
+            operation: "enable",
+            message: error?.message || "unknown_error",
+          },
+        });
+      }
       toast({
         title: "Erro ao ativar notificações",
         description: error?.message || "Tente novamente.",
@@ -77,7 +127,7 @@ export function usePushNotifications() {
     } finally {
       setPushLoading(false);
     }
-  }, [vapidPublicKey, toast]);
+  }, [vapidPublicKey, toast, getAuditContext]);
 
   useEffect(() => {
     const supported =
@@ -137,18 +187,42 @@ export function usePushNotifications() {
           body: "Se você recebeu, está tudo certo!",
         },
       });
+      const auditCtx = await getAuditContext();
+      if (auditCtx) {
+        await auditEvent({
+          organizationId: auditCtx.organizationId,
+          actorVolunteerId: auditCtx.volunteerId,
+          action: "notification.push.test_sent",
+          entityType: "notification_settings",
+          entityId: auditCtx.volunteerId || null,
+        });
+      }
       toast({
         title: "Teste enviado",
         description: "Verifique se a notificação chegou.",
       });
     } catch (error: any) {
+      const auditCtx = await getAuditContext();
+      if (auditCtx) {
+        await auditEvent({
+          organizationId: auditCtx.organizationId,
+          actorVolunteerId: auditCtx.volunteerId,
+          action: "system.error",
+          entityType: "system",
+          metadata: {
+            area: "push",
+            operation: "test",
+            message: error?.message || "unknown_error",
+          },
+        });
+      }
       toast({
         title: "Erro",
         description: error?.message || "Não foi possível enviar o teste.",
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast, getAuditContext]);
 
   const handleDisablePush = useCallback(async () => {
     if (!pushSupported) return;
@@ -169,11 +243,35 @@ export function usePushNotifications() {
       }
 
       setPushEnabled(false);
+      const auditCtx = await getAuditContext();
+      if (auditCtx) {
+        await auditEvent({
+          organizationId: auditCtx.organizationId,
+          actorVolunteerId: auditCtx.volunteerId,
+          action: "notification.push.disabled",
+          entityType: "notification_settings",
+          entityId: auditCtx.volunteerId || null,
+        });
+      }
       toast({
         title: "Notificações desativadas",
         description: "Você não receberá alertas neste dispositivo.",
       });
     } catch (error: any) {
+      const auditCtx = await getAuditContext();
+      if (auditCtx) {
+        await auditEvent({
+          organizationId: auditCtx.organizationId,
+          actorVolunteerId: auditCtx.volunteerId,
+          action: "system.error",
+          entityType: "system",
+          metadata: {
+            area: "push",
+            operation: "disable",
+            message: error?.message || "unknown_error",
+          },
+        });
+      }
       toast({
         title: "Erro",
         description: error?.message || "Não foi possível desativar.",
@@ -182,7 +280,7 @@ export function usePushNotifications() {
     } finally {
       setPushLoading(false);
     }
-  }, [pushSupported, toast]);
+  }, [pushSupported, toast, getAuditContext]);
 
   return {
     pushSupported,

@@ -21,7 +21,7 @@ interface UnavailabilityEntry {
   startDate: string;
   endDate: string;
   reason?: string | null;
-  volunteerId: string;
+  volunteerId: string | null;
 }
 
 interface UnavailabilitySectionProps {

@@ -46,3 +46,4 @@ export {
 } from "./use-chat";
 
 export { useAuthAccessEvents } from "./use-auth-access";
+export { useAuditEvents } from "./use-audit-events";

@@ -1,18 +1,6 @@
 import { ServiceCard } from "@/components/ServiceCard";
 import { LoadingCardGrid } from "@/components/LoadingCardGrid";
-
-interface Service {
-  id: string;
-  date: string;
-  eventTypeId?: string;
-  [key: string]: any;
-}
-
-interface EventType {
-  id: string;
-  name: string;
-  color?: string;
-}
+import type { Service, EventType } from "@shared/schema";
 
 interface UpcomingServicesProps {
   services: Service[];

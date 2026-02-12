@@ -138,7 +138,32 @@ serve(async (req) => {
       )
     );
 
+    // Batch fetch: coletar todos auth_user_ids necessários e buscar subscriptions de uma vez
+    const allAuthUserIds = [...new Set(
+      serviceRows.flatMap((s) => {
+        const { volunteers: assigns } = normalizeAssignments(s.assignments);
+        return assigns
+          .map((a: any) => volunteerMap.get(a?.volunteerId)?.auth_user_id)
+          .filter(Boolean);
+      })
+    )] as string[];
+
+    const subsMap = new Map<string, any[]>();
+    if (allAuthUserIds.length > 0) {
+      const { data: allSubs } = await supabase
+        .from("push_subscriptions")
+        .select("user_id, subscription")
+        .in("user_id", allAuthUserIds);
+
+      for (const sub of allSubs || []) {
+        if (!subsMap.has(sub.user_id)) subsMap.set(sub.user_id, []);
+        subsMap.get(sub.user_id)!.push(sub);
+      }
+    }
+
     let sentCount = 0;
+    const pendingLogs: any[] = [];
+    const pendingAuditEvents: any[] = [];
 
     for (const service of serviceRows) {
       const reminderType =
@@ -162,11 +187,7 @@ serve(async (req) => {
         const sentKey = `${service.id}:${volunteer.id}:${reminderType}`;
         if (sentSet.has(sentKey)) continue;
 
-        const { data: subscriptions } = await supabase
-          .from("push_subscriptions")
-          .select("subscription")
-          .eq("user_id", volunteer.auth_user_id);
-
+        const subscriptions = subsMap.get(volunteer.auth_user_id);
         if (!subscriptions || subscriptions.length === 0) continue;
 
         const title =
@@ -188,20 +209,31 @@ serve(async (req) => {
           data: { serviceId: service.id },
         });
 
-        const sendTasks = subscriptions.map((sub: any) =>
-          webpush.sendNotification(sub.subscription, payload).catch(async (err) => {
+        let deliveredCount = 0;
+        let failedCount = 0;
+        let firstErrorCode: string | null = null;
+
+        const sendTasks = subscriptions.map(async (sub: any) => {
+          try {
+            await webpush.sendNotification(sub.subscription, payload);
+            deliveredCount += 1;
+          } catch (err: any) {
+            failedCount += 1;
+            if (!firstErrorCode) {
+              firstErrorCode = String(err?.statusCode || "unknown");
+            }
             if (err?.statusCode === 410 || err?.statusCode === 404) {
               await supabase
                 .from("push_subscriptions")
                 .delete()
                 .match({ subscription: sub.subscription });
             }
-          })
-        );
+          }
+        });
 
         await Promise.all(sendTasks);
 
-        await supabase.from("notification_logs").insert({
+        pendingLogs.push({
           id: crypto.randomUUID(),
           volunteer_id: volunteer.id,
           service_id: service.id,
@@ -210,10 +242,61 @@ serve(async (req) => {
           status: "sent",
           details: { title, body },
         });
+        if (deliveredCount > 0) {
+          pendingAuditEvents.push({
+            id: crypto.randomUUID(),
+            organization_id: service.organization_id,
+            actor_auth_user_id: null,
+            actor_volunteer_id: volunteer.id,
+            action: "notification.push.reminder.sent",
+            entity_type: "notification_delivery",
+            entity_id: service.id,
+            metadata: {
+              reminderType,
+              serviceDate: service.date,
+              title,
+              delivery: {
+                subscriptions: subscriptions.length,
+                delivered: deliveredCount,
+                failed: failedCount,
+              },
+            },
+          });
+        }
+        if (failedCount > 0) {
+          pendingAuditEvents.push({
+            id: crypto.randomUUID(),
+            organization_id: service.organization_id,
+            actor_auth_user_id: null,
+            actor_volunteer_id: volunteer.id,
+            action: "notification.push.reminder.failed",
+            entity_type: "notification_delivery",
+            entity_id: service.id,
+            metadata: {
+              reminderType,
+              serviceDate: service.date,
+              title,
+              delivery: {
+                subscriptions: subscriptions.length,
+                delivered: deliveredCount,
+                failed: failedCount,
+                errorCode: firstErrorCode,
+              },
+            },
+          });
+        }
 
         sentSet.add(sentKey);
         sentCount += 1;
       }
+    }
+
+    // Batch insert de logs
+    if (pendingLogs.length > 0) {
+      await supabase.from("notification_logs").insert(pendingLogs);
+    }
+    if (pendingAuditEvents.length > 0) {
+      await supabase.from("audit_events").insert(pendingAuditEvents);
     }
 
     return new Response(JSON.stringify({ success: true, sent: sentCount }), {

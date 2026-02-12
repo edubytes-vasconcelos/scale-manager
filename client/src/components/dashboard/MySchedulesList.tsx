@@ -2,20 +2,9 @@ import { ClipboardCheck, Check, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingCardGrid } from "@/components/LoadingCardGrid";
+import type { Service, EventType } from "@shared/schema";
 
-interface Schedule {
-  id: string;
-  title: string;
-  date: string;
-  eventTypeId?: string;
-  assignments?: any;
-}
-
-interface EventType {
-  id: string;
-  name: string;
-  color?: string;
-}
+type Schedule = Service;
 
 interface MySchedulesListProps {
   schedules: Schedule[];

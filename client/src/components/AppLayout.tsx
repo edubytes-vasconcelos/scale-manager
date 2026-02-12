@@ -93,10 +93,10 @@ const navItems: {
   },
   {
     path: "/admin/access-audit",
-    label: "Acessos",
+    label: "Observabilidade",
     icon: Activity,
     roles: ["admin"],
-    breadcrumb: ["Admin", "Acessos"],
+    breadcrumb: ["Admin", "Observabilidade"],
   },
   {
     path: "/admin/teams",

@@ -10,14 +10,14 @@ type AuthAccessPayload = {
   metadata?: Record<string, unknown>;
 };
 
-function detectDeviceType(userAgent: string): "mobile" | "tablet" | "desktop" {
+export function detectDeviceType(userAgent: string): "mobile" | "tablet" | "desktop" {
   const ua = userAgent.toLowerCase();
   if (/ipad|tablet|kindle|silk|playbook/.test(ua)) return "tablet";
   if (/mobi|android|iphone|ipod|windows phone/.test(ua)) return "mobile";
   return "desktop";
 }
 
-function detectOs(userAgent: string): string {
+export function detectOs(userAgent: string): string {
   const ua = userAgent.toLowerCase();
   if (ua.includes("windows")) return "windows";
   if (ua.includes("android")) return "android";
@@ -27,7 +27,7 @@ function detectOs(userAgent: string): string {
   return "unknown";
 }
 
-function detectBrowser(userAgent: string): string {
+export function detectBrowser(userAgent: string): string {
   const ua = userAgent.toLowerCase();
   if (ua.includes("edg/")) return "edge";
   if (ua.includes("opr/") || ua.includes("opera")) return "opera";
@@ -79,23 +79,28 @@ function getClientContext() {
 export async function auditAuthAccessEvent(payload: AuthAccessPayload) {
   try {
     const ctx = getClientContext();
-    const { error } = await supabase.from("auth_access_events").insert({
+    const action = payload.event === "login" ? "auth.login" : "auth.logout";
+    const { error } = await supabase.from("audit_events").insert({
       organization_id: payload.organizationId,
       actor_auth_user_id: payload.actorAuthUserId,
       actor_volunteer_id: payload.actorVolunteerId ?? null,
-      event: payload.event,
-      app_platform: ctx.appPlatform,
-      device_type: ctx.deviceType,
-      os: ctx.os,
-      browser: ctx.browser,
-      user_agent: ctx.userAgent,
-      language: ctx.language,
-      timezone: ctx.timezone,
-      screen: ctx.screen,
-      viewport: ctx.viewport,
-      path: ctx.path,
-      referrer: ctx.referrer,
-      metadata: payload.metadata ?? {},
+      action,
+      entity_type: "session",
+      entity_id: payload.actorAuthUserId,
+      metadata: {
+        ...payload.metadata,
+        appPlatform: ctx.appPlatform,
+        deviceType: ctx.deviceType,
+        os: ctx.os,
+        browser: ctx.browser,
+        userAgent: ctx.userAgent,
+        language: ctx.language,
+        timezone: ctx.timezone,
+        screen: ctx.screen,
+        viewport: ctx.viewport,
+        path: ctx.path,
+        referrer: ctx.referrer,
+      },
     });
 
     if (error) {
