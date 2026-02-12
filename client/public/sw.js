@@ -1,10 +1,9 @@
 // ─── Cache Config ────────────────────────────
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
 const APP_SHELL = [
-  '/',
   '/offline.html',
   '/favicon.ico',
   '/icon-192.png',
@@ -53,7 +52,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Assets estáticos → cache-first
+  // Navegação de páginas (HTML) → sempre prioriza rede para evitar shell antigo.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request, DYNAMIC_CACHE));
+    return;
+  }
+
+  // Assets estáticos versionados (ex: /assets/*.js) → cache-first
   event.respondWith(cacheFirst(request, STATIC_CACHE));
 });
 
