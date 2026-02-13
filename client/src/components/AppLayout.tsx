@@ -223,7 +223,7 @@ export default function AppLayout({
     <TooltipProvider delayDuration={200}>
       <div className="min-h-screen bg-background">
         {/* MOBILE HEADER */}
-        <header className="lg:hidden bg-card border-b border-border sticky top-0 z-40 shadow-sm">
+        <header className="lg:hidden sticky top-0 z-40 border-b border-border shadow-sm !bg-background !opacity-100 backdrop-blur-none">
           <div className="px-4 h-14 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button
@@ -349,7 +349,7 @@ export default function AppLayout({
 
         {/* MOBILE MENU */}
         <nav
-          className={`lg:hidden fixed left-0 top-14 bottom-0 w-64 bg-card border-r border-border z-30 transform transition-transform ${
+          className={`lg:hidden fixed left-0 top-14 bottom-0 w-64 border-r border-border z-30 transform transition-transform !bg-background !opacity-100 backdrop-blur-none ${
             mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
