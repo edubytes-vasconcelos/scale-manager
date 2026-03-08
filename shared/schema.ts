@@ -70,6 +70,7 @@ export const eventTypes = pgTable("event_types", {
 export type ServiceAssignment = {
   volunteerId?: string;
   teamId?: string;
+  ministryId?: string;
   status: "pending" | "confirmed" | "declined";
   note?: string;
 };

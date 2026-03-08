@@ -163,6 +163,7 @@ export default function Schedules() {
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
   const [volunteerSearch, setVolunteerSearch] = useState("");
   const [volunteerMinistryFilter, setVolunteerMinistryFilter] = useState("all");
+  const [volunteerMinistrySelections, setVolunteerMinistrySelections] = useState<Record<string, string>>({});
   const [peopleAccordionValue, setPeopleAccordionValue] = useState<string[]>([]);
   const [shouldFocusAssign, setShouldFocusAssign] = useState(false);
   const [isSavingAssign, setIsSavingAssign] = useState(false);
@@ -1188,7 +1189,7 @@ export default function Schedules() {
     }
   };
 
-  const handleAddVolunteer = async (force = false, directVolunteerId?: string) => {
+  const handleAddVolunteer = async (force = false, directVolunteerId?: string, directMinistryId?: string) => {
     const volunteerId = directVolunteerId ?? selectedVolunteerId;
     if (!selectedService || !volunteerId) return;
     if (!canManageVolunteers) return;
@@ -1223,7 +1224,7 @@ export default function Schedules() {
             action: (
               <ToastAction
                 altText="Adicionar mesmo assim"
-                onClick={() => handleAddVolunteer(true, volunteerId)}
+                onClick={() => handleAddVolunteer(true, volunteerId, directMinistryId)}
               >
                 Adicionar mesmo assim
               </ToastAction>
@@ -1260,7 +1261,7 @@ export default function Schedules() {
         ...current,
         volunteers: [
           ...current.volunteers,
-          { volunteerId: volunteerId, status: "pending" as const },
+          { volunteerId: volunteerId, ministryId: directMinistryId || undefined, status: "pending" as const },
         ],
       };
 
@@ -2751,7 +2752,17 @@ export default function Schedules() {
                               <p className="text-sm font-medium truncate">
                                 {getVolunteerName(a.volunteerId)}
                               </p>
-                              <div className="mt-1">{getStatusBadge(a.status)}</div>
+                              <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                {getStatusBadge(a.status)}
+                                {a.ministryId && (() => {
+                                  const m = ministries?.find((m) => m.id === a.ministryId);
+                                  return m ? (
+                                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                      {m.name}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
                             </div>
 
                             <Button
@@ -2993,26 +3004,62 @@ export default function Schedules() {
                                 )}`
                               : "";
 
+                            // Resolve qual ministério usar para este voluntário
+                            const vMinistryIds = v.ministryAssignments?.map((a) => a.ministryId) ?? [];
+                            const needsMinistrySelect = isAdmin && vMinistryIds.length > 1;
+                            const resolvedMinistryId = needsMinistrySelect
+                              ? (volunteerMinistrySelections[v.id] ?? "")
+                              : isAdmin
+                              ? vMinistryIds[0]
+                              : leaderMinistryIds[0];
+
                             return (
                               <div
                                 key={v.id}
                                 className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0"
                               >
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <p className="text-sm font-medium truncate">{v.name}</p>
                                   {isUnavailable && (
                                     <p className="text-xs text-muted-foreground">
                                       Indisponível ({period}{reason ? `: ${reason}` : ""})
                                     </p>
                                   )}
+                                  {needsMinistrySelect && (
+                                    <Select
+                                      value={volunteerMinistrySelections[v.id] ?? ""}
+                                      onValueChange={(val) =>
+                                        setVolunteerMinistrySelections((prev) => ({ ...prev, [v.id]: val }))
+                                      }
+                                    >
+                                      <SelectTrigger className="mt-1 h-7 text-xs">
+                                        <SelectValue placeholder="Selecione o ministério" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {vMinistryIds.map((mid) => {
+                                          const m = ministries?.find((m) => m.id === mid);
+                                          return m ? (
+                                            <SelectItem key={m.id} value={m.id} className="text-xs">
+                                              {m.name}
+                                            </SelectItem>
+                                          ) : null;
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
                                 </div>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  disabled={isSavingAssign || isUnavailable}
+                                  disabled={isSavingAssign || isUnavailable || (needsMinistrySelect && !resolvedMinistryId)}
                                   onClick={() => {
                                     setVolunteerSearch("");
-                                    handleAddVolunteer(false, v.id);
+                                    setVolunteerMinistrySelections((prev) => {
+                                      const next = { ...prev };
+                                      delete next[v.id];
+                                      return next;
+                                    });
+                                    handleAddVolunteer(false, v.id, resolvedMinistryId || undefined);
                                   }}
                                 >
                                   Adicionar
