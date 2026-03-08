@@ -161,6 +161,9 @@ export default function Schedules() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedVolunteerId, setSelectedVolunteerId] = useState("");
+  const [volunteerSearch, setVolunteerSearch] = useState("");
+  const [volunteerMinistryFilter, setVolunteerMinistryFilter] = useState("all");
+  const [peopleAccordionValue, setPeopleAccordionValue] = useState<string[]>([]);
   const [shouldFocusAssign, setShouldFocusAssign] = useState(false);
   const [isSavingAssign, setIsSavingAssign] = useState(false);
   const [editEventTypeId, setEditEventTypeId] = useState("");
@@ -373,6 +376,9 @@ export default function Schedules() {
     setShouldFocusAssign(!!options?.focusPreacher);
     setAutoMinistrySlots({});
     setAutoSuggestions([]);
+    const hasAssignments = getNormalizedAssignments(service).volunteers.length > 0 ||
+      getNormalizedAssignments(service).preachers.length > 0;
+    setPeopleAccordionValue(hasAssignments ? ["people"] : []);
     setAssignDialogOpen(true);
 
     if (services?.length) {
@@ -464,6 +470,25 @@ export default function Schedules() {
       )
     );
   }, [preachers, normalizedPreacherSearch]);
+
+  const filteredVolunteers = useMemo(() => {
+    if (!volunteers) return [];
+    let result = volunteers;
+    if (volunteerMinistryFilter !== "all") {
+      result = result.filter((v) =>
+        v.ministryAssignments?.some(
+          (a) => a.ministryId === volunteerMinistryFilter
+        )
+      );
+    }
+    const normalizedVolSearch = normalizeSearch(volunteerSearch);
+    if (normalizedVolSearch) {
+      result = result.filter((v) =>
+        normalizeSearch(v.name).includes(normalizedVolSearch)
+      );
+    }
+    return result;
+  }, [volunteers, volunteerMinistryFilter, volunteerSearch]);
 
   const exactPreacherMatch = useMemo(() => {
     if (!normalizedPreacherSearch || !preachers) return null;
@@ -1163,8 +1188,9 @@ export default function Schedules() {
     }
   };
 
-  const handleAddVolunteer = async (force = false) => {
-    if (!selectedService || !selectedVolunteerId) return;
+  const handleAddVolunteer = async (force = false, directVolunteerId?: string) => {
+    const volunteerId = directVolunteerId ?? selectedVolunteerId;
+    if (!selectedService || !volunteerId) return;
     if (!canManageVolunteers) return;
     setIsSavingAssign(true);
 
@@ -1174,7 +1200,7 @@ export default function Schedules() {
           if (service.id === selectedService.id) return false;
           if (service.date !== selectedService.date) return false;
           return getNormalizedAssignments(service).volunteers.some(
-            (assignment) => assignment.volunteerId === selectedVolunteerId
+            (assignment) => assignment.volunteerId === volunteerId
           );
         });
 
@@ -1197,7 +1223,7 @@ export default function Schedules() {
             action: (
               <ToastAction
                 altText="Adicionar mesmo assim"
-                onClick={() => handleAddVolunteer(true)}
+                onClick={() => handleAddVolunteer(true, volunteerId)}
               >
                 Adicionar mesmo assim
               </ToastAction>
@@ -1208,7 +1234,7 @@ export default function Schedules() {
       }
 
       const unavailabilityEntry = getVolunteerUnavailability(
-        selectedVolunteerId,
+        volunteerId,
         selectedService.date
       );
       if (unavailabilityEntry) {
@@ -1228,13 +1254,13 @@ export default function Schedules() {
       }
 
       const current = await fetchAssignments(selectedService.id);
-      if (current.volunteers.some((a) => a.volunteerId === selectedVolunteerId)) return;
+      if (current.volunteers.some((a) => a.volunteerId === volunteerId)) return;
 
       const updated = {
         ...current,
         volunteers: [
           ...current.volunteers,
-          { volunteerId: selectedVolunteerId, status: "pending" as const },
+          { volunteerId: volunteerId, status: "pending" as const },
         ],
       };
 
@@ -1258,11 +1284,12 @@ export default function Schedules() {
         entityType: "service",
         entityId: selectedService.id,
         metadata: {
-          volunteerId: selectedVolunteerId,
+          volunteerId: volunteerId,
           source: force ? "force_conflict_override" : "manual",
         },
       });
       setSelectedVolunteerId("");
+      setPeopleAccordionValue(["people"]);
     } catch (error: any) {
       console.error(error);
       toast({
@@ -1424,6 +1451,7 @@ export default function Schedules() {
         },
       });
       resetPreacherForm();
+      setPeopleAccordionValue(["people"]);
     } catch (error: any) {
       console.error(error);
       toast({
@@ -1810,7 +1838,7 @@ export default function Schedules() {
                   `;
                 })
                 .join("")
-            : `<span class="empty">Nenhum voluntario escalado.</span>`;
+            : `<span class="empty">Nenhum voluntário escalado.</span>`;
 
         const preacherHtml = preacherNames
           ? preacherNames
@@ -2002,7 +2030,7 @@ export default function Schedules() {
             variant={viewMode === "calendar" ? "default" : "outline"}
             onClick={() => setViewMode("calendar")}
           >
-            <CalendarDays className="w-4 h-4 mr-1" /> Calendario
+            <CalendarDays className="w-4 h-4 mr-1" /> Calendário
           </Button>
 
         {canManageSchedules && (
@@ -2047,7 +2075,7 @@ export default function Schedules() {
               <div className="space-y-1 lg:col-span-2">
                 <Label>Busca</Label>
                 <Input
-                  placeholder="Buscar por evento, pregador ou voluntario"
+                  placeholder="Buscar por evento, pregador ou voluntário"
                   value={filterSearch}
                   onChange={(e) => setFilterSearch(e.target.value)}
                 />
@@ -2071,7 +2099,7 @@ export default function Schedules() {
               </div>
 
               <div className="space-y-1">
-                <Label>Periodo</Label>
+                <Label>Período</Label>
                 <Select
                   value={filterTime}
                   onValueChange={(v) => setFilterTime(v as "all" | "future" | "past")}
@@ -2117,7 +2145,7 @@ export default function Schedules() {
               </div>
 
               <div className="space-y-1">
-                <Label>Ate</Label>
+                <Label>Até</Label>
                 <Input
                   type="date"
                   value={filterDateTo}
@@ -2266,7 +2294,7 @@ export default function Schedules() {
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground italic">
-                      Nenhum voluntario adicionado
+                      Nenhum voluntário adicionado
                     </p>
                   )}
 
@@ -2345,7 +2373,7 @@ export default function Schedules() {
             </div>
 
             <div className="text-center">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Calendario</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Calendário</p>
               <h3 className="text-lg font-semibold capitalize text-foreground tracking-tight">
                 {format(calendarMonth, "MMMM yyyy", { locale: ptBR })}
               </h3>
@@ -2509,7 +2537,14 @@ export default function Schedules() {
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent className="max-w-md w-[96vw] sm:w-[92vw] lg:w-[640px] max-h-[90dvh] overflow-hidden p-0">
           <DialogHeader className="px-4 pt-4 pb-3 border-b bg-background">
-            <DialogTitle>{isCreateMode ? "Nova escala" : "Gerenciar escala"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {isCreateMode ? "Nova escala" : "Gerenciar escala"}
+              {selectedService && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  {format(parseISO(selectedService.date), "dd/MM/yyyy")}
+                </span>
+              )}
+            </DialogTitle>
             <DialogDescription>
               {selectedService ? (
                 (() => {
@@ -2526,8 +2561,8 @@ export default function Schedules() {
                   );
                 })()
               ) : newDate ? (
-                <span className="text-muted-foreground">
-                  {format(parseISO(newDate), "EEEE, dd/MM", { locale: ptBR })}
+                <span className="text-muted-foreground capitalize">
+                  {format(parseISO(newDate), "EEEE, dd 'de' MMMM", { locale: ptBR })}
                 </span>
               ) : (
                 <span className="text-muted-foreground">
@@ -2580,7 +2615,7 @@ export default function Schedules() {
                 <div className="space-y-1">
                   <Label>Nome personalizado</Label>
                   <Input
-                    placeholder="Ex: Reuniao Especial"
+                    placeholder="Ex: Reunião Especial"
                     value={newCustomName}
                     onChange={(e) => setNewCustomName(e.target.value)}
                   />
@@ -2588,7 +2623,7 @@ export default function Schedules() {
 
                 <div className="space-y-2 border-t pt-2">
                   <div className="flex items-center justify-between">
-                    <Label>Recorrencia</Label>
+                    <Label>Recorrência</Label>
                   </div>
 
                   <RadioGroup
@@ -2601,11 +2636,11 @@ export default function Schedules() {
                   >
                     <div className="flex items-center gap-2">
                       <RadioGroupItem value="none" id="r-none" />
-                      <Label htmlFor="r-none">Unica</Label>
+                      <Label htmlFor="r-none">Única</Label>
                     </div>
                     <div className="flex items-center gap-2">
                       <RadioGroupItem value="daily" id="r-daily" />
-                      <Label htmlFor="r-daily">Diaria</Label>
+                      <Label htmlFor="r-daily">Diária</Label>
                     </div>
                     <div className="flex items-center gap-2">
                       <RadioGroupItem value="weekly" id="r-weekly" />
@@ -2615,7 +2650,7 @@ export default function Schedules() {
 
                   {recurrenceType !== "none" && (
                     <div className="space-y-1">
-                      <Label>Ate quando?</Label>
+                      <Label>Até quando?</Label>
                       <Input
                         type="date"
                         min={getMinEndDate()}
@@ -2627,11 +2662,9 @@ export default function Schedules() {
                   )}
                 </div>
 
-                <div className="flex justify-end">
-                  <Button onClick={handleCreateService} disabled={isSavingCreate || !newDate}>
-                    Criar
-                  </Button>
-                </div>
+                <Button onClick={handleCreateService} disabled={isSavingCreate || !newDate} className="w-full">
+                  {isSavingCreate ? "Criando..." : "Criar escala"}
+                </Button>
               </div>
             ) : (
               <>
@@ -2660,7 +2693,7 @@ export default function Schedules() {
                       <div className="space-y-1">
                         <Label>Nome personalizado</Label>
                         <Input
-                          placeholder="Ex: Reuniao Especial"
+                          placeholder="Ex: Reunião Especial"
                           value={editEventTitle}
                           onChange={(e) => setEditEventTitle(e.target.value)}
                         />
@@ -2671,8 +2704,8 @@ export default function Schedules() {
                     )}
 
                     {isEventDirty && (
-                      <Button onClick={handleUpdateServiceEvent} disabled={isSavingEvent}>
-                        Salvar evento
+                      <Button onClick={handleUpdateServiceEvent} disabled={isSavingEvent} className="w-full">
+                        {isSavingEvent ? "Salvando..." : "Salvar evento"}
                       </Button>
                     )}
                   </div>
@@ -2686,17 +2719,20 @@ export default function Schedules() {
 
                 <Accordion
                   type="multiple"
-                  defaultValue={
-                    selectedAssignments.volunteers.length > 0 ||
-                    selectedAssignments.preachers.length > 0
-                      ? ["people"]
-                      : []
-                  }
+                  value={peopleAccordionValue}
+                  onValueChange={setPeopleAccordionValue}
                   className="rounded-2xl border border-border bg-card px-3 shadow-sm"
                 >
                   <AccordionItem value="people" className="border-none">
                     <AccordionTrigger className="py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:no-underline">
-                      Pessoas e atribuicoes
+                      <span className="flex items-center gap-2">
+                        Pessoas e atribuições
+                        {(selectedAssignments.volunteers.length > 0 || selectedAssignments.preachers.length > 0) && (
+                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary normal-case tracking-normal">
+                            {selectedAssignments.volunteers.length + selectedAssignments.preachers.length}
+                          </span>
+                        )}
+                      </span>
                     </AccordionTrigger>
                     <AccordionContent className="pb-3">
                   <div className="space-y-2">
@@ -2733,10 +2769,12 @@ export default function Schedules() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground italic">
-                        Nenhum voluntario adicionado
+                        Nenhum voluntário adicionado ainda.
                       </p>
                     )}
                   </div>
+
+                  <div className="h-px bg-border" />
 
                   <div className="space-y-2">
                     <Label>
@@ -2789,7 +2827,7 @@ export default function Schedules() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground italic">
-                        Nenhum pregador adicionado
+                        Nenhum pregador adicionado ainda.
                       </p>
                     )}
                   </div>
@@ -2811,13 +2849,13 @@ export default function Schedules() {
 
                 {canManageVolunteers && (
                   <div className="space-y-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
-                    <div className="flex items-center justify-between gap-2">
+                    <div>
                       <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Autoescala (beta)
+                        Sugestão automática
                       </Label>
-                      <div className="text-xs text-muted-foreground">
-                        Evento atual
-                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Defina quantas vagas por ministério e gere sugestões com base no histórico.
+                      </p>
                     </div>
 
                     {manageableMinistriesForAuto.length === 0 ? (
@@ -2903,55 +2941,92 @@ export default function Schedules() {
 
                 {canManageVolunteers && (
                   <div className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
-                    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Adicionar voluntario
-                    </Label>
-                    <Select value={selectedVolunteerId} onValueChange={setSelectedVolunteerId}>
+                    <div>
+                      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Adicionar voluntário
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Filtre por ministério ou busque pelo nome.
+                      </p>
+                    </div>
+                    <Select
+                      value={volunteerMinistryFilter}
+                      onValueChange={(v) => {
+                        setVolunteerMinistryFilter(v);
+                        setVolunteerSearch("");
+                      }}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione um voluntario" />
+                        <SelectValue placeholder="Ministério" />
                       </SelectTrigger>
                       <SelectContent>
-                        {volunteers?.map((v) => {
-                          const unavailabilityEntry = getVolunteerUnavailability(
-                            v.id,
-                            selectedService?.date
-                          );
-                          const isUnavailable = !!unavailabilityEntry;
-                          const reason = unavailabilityEntry?.reason?.trim();
-                          const period = unavailabilityEntry
-                            ? `${format(
-                                parseISO(String(unavailabilityEntry.startDate)),
-                                "dd/MM"
-                              )} - ${format(
-                                parseISO(String(unavailabilityEntry.endDate)),
-                                "dd/MM"
-                              )}`
-                            : "";
-
-                          return (
-                            <SelectItem key={v.id} value={v.id} disabled={isUnavailable}>
-                              <div className="flex flex-col">
-                                <span className="text-sm">{v.name}</span>
-                                {isUnavailable && (
-                                  <span className="text-xs text-muted-foreground">
-                                    Indisponivel ({period}
-                                    {reason ? `: ${reason}` : ""})
-                                  </span>
-                                )}
-                              </div>
-                            </SelectItem>
-                          );
-                        })}
+                        <SelectItem value="all">Todos os ministérios</SelectItem>
+                        {ministries?.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
+                    <Input
+                      placeholder="Buscar por nome..."
+                      value={volunteerSearch}
+                      onChange={(e) => setVolunteerSearch(e.target.value)}
+                    />
+                    {(volunteerSearch.trim() || volunteerMinistryFilter !== "all") && (
+                      <div className="max-h-44 overflow-y-auto rounded-md border">
+                        {filteredVolunteers.length > 0 ? (
+                          filteredVolunteers.map((v) => {
+                            const unavailabilityEntry = getVolunteerUnavailability(
+                              v.id,
+                              selectedService?.date
+                            );
+                            const isUnavailable = !!unavailabilityEntry;
+                            const reason = unavailabilityEntry?.reason?.trim();
+                            const period = unavailabilityEntry
+                              ? `${format(
+                                  parseISO(String(unavailabilityEntry.startDate)),
+                                  "dd/MM"
+                                )} - ${format(
+                                  parseISO(String(unavailabilityEntry.endDate)),
+                                  "dd/MM"
+                                )}`
+                              : "";
 
-                    <Button
-                      onClick={() => handleAddVolunteer()}
-                      disabled={isSavingAssign}
-                      className="w-full"
-                    >
-                      Adicionar
-                    </Button>
+                            return (
+                              <div
+                                key={v.id}
+                                className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{v.name}</p>
+                                  {isUnavailable && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Indisponível ({period}{reason ? `: ${reason}` : ""})
+                                    </p>
+                                  )}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isSavingAssign || isUnavailable}
+                                  onClick={() => {
+                                    setVolunteerSearch("");
+                                    handleAddVolunteer(false, v.id);
+                                  }}
+                                >
+                                  Adicionar
+                                </Button>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                            Nenhum voluntário encontrado.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
